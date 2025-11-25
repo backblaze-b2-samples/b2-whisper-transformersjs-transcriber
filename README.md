@@ -49,7 +49,7 @@ Browser Whisper (Transformers.js) → Transcribe
 ### 1. Clone & Install
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/backblaze-b2-samples/b2-whisper-transformersjs-transcriber.git
 cd b2-whisper-transcriber/backend
 npm install
 ```
@@ -263,20 +263,6 @@ MP3, WAV, OGG, M4A, WEBM, FLAC
 - Safari 15.4+
 
 Requires WebAssembly and ES6 modules support.
-
-## 💰 Costs
-
-**[Backblaze B2 Pricing](https://www.backblaze.com/b2/cloud-storage-pricing.html)**:
-- Storage: **$6/TB/month** (vs AWS S3: $23/TB)
-- Downloads: $10/TB (first 3x storage free daily)
-- Uploads: **FREE**
-
-**Example**:
-- 1,000 audio files @ 2MB each = 2GB storage = **$0.012/month**
-- 1,000 transcripts @ 5KB each = 5MB storage = negligible
-- **Total: ~$0.01/month for 1,000 files**
-
-**Transformers.js**: Free and open source
 
 ## Limitations
 
