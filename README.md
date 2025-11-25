@@ -127,13 +127,14 @@ b2 update-bucket --cors-rules '[
 
 ## Usage
 
-1. Open the frontend in your browser
-2. Ensure Backend API URL is correct (default: `http://localhost:3000`)
-3. Drag and drop an audio file or click to browse
-4. Audio automatically uploads to B2
-5. Click "Transcribe with Whisper"
-6. Wait for transcription (first run downloads model)
-7. View results and access B2 links
+1. Open the frontend in your browser  
+2. Ensure the Backend API URL is correct (default: `http://localhost:3000`)  
+3. Drag and drop an audio file or click to browse  
+   - Or download this **[example audio clip](https://f001.backblazeb2.com/file/odh-datasets/samplemedia/audio/One-small-step-for-man.mp3)** to test  
+4. Audio automatically uploads to B2  
+5. Click **"Transcribe with Whisper"**  
+6. Wait for transcription (first run downloads model)  
+7. View results and access files in B2
 
 ## Deployment
 
