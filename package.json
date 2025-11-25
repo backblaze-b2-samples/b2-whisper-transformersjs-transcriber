@@ -1,0 +1,17 @@
+{
+  "name": "b2-whisper-transcriber",
+  "version": "1.0.0",
+  "description": "Client-side Speech-to-Text with Whisper and Backblaze B2",
+  "scripts": {
+    "install:backend": "cd backend && npm install",
+    "start:backend": "cd backend && npm start",
+    "dev:backend": "cd backend && npm run dev",
+    "start:frontend": "cd frontend && python3 -m http.server 8080",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "keywords": ["whisper", "b2", "backblaze", "transcription", "speech-to-text"],
+  "author": "",
+  "license": "MIT"
+}

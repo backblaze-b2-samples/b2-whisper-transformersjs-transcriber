@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B2 + Whisper Transcriber</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🎤</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.95em;
+        }
+
+        .upload-zone {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-zone:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-zone.dragover {
+            background: #f0f0ff;
+            border-color: #764ba2;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin: 5px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status.error {
+            background: #fff5f5;
+            border-left-color: #e53e3e;
+        }
+
+        .status.success {
+            background: #f0fff4;
+            border-left-color: #38a169;
+        }
+
+        .progress {
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 8px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .result {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .result h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .transcript-text {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .links a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 8px 16px;
+            border: 1px solid #667eea;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        .links a:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 B2 + Whisper Transcriber</h1>
+        <p class="subtitle">Client-side Speech-to-Text Demo using Transformers.js + Backblaze B2</p>
+
+        <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin-bottom: 25px; border-radius: 5px;">
+            <p style="margin: 0; line-height: 1.6; color: #555; font-size: 0.95em;">
+                <strong>🚀 What this demonstrates:</strong><br>
+                • <strong>Transformers.js</strong> - Run OpenAI's Whisper AI model entirely in your browser (no server GPU needed)<br>
+                • <strong>Backblaze B2</strong> - Cost-effective cloud storage with S3-compatible API<br>
+                • <strong>Pre-signed URLs</strong> - Secure direct browser-to-cloud uploads without exposing credentials<br>
+                <br>
+                Everything runs client-side. Your audio never touches our server.
+            </p>
+        </div>
+
+        <div class="upload-zone" id="uploadZone">
+            <div style="font-size: 3em; margin-bottom: 10px;">🎵</div>
+            <h3>Drop audio file here or click to browse</h3>
+            <p style="color: #999; margin-top: 10px;">Supports: MP3, WAV, OGG, M4A, WEBM</p>
+            <input type="file" id="fileInput" accept="audio/*">
+        </div>
+
+        <div style="text-align: center;">
+            <button id="transcribeBtn" disabled>Transcribe with Whisper</button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="progress" id="progressContainer" style="display: none;">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <div class="result" id="result">
+            <h3>✅ Transcription Complete</h3>
+            <div class="transcript-text" id="transcriptText"></div>
+
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                <p style="margin-bottom: 10px; font-weight: 600; color: #555;">📦 Files stored in Backblaze B2:</p>
+                <div class="links">
+                    <a id="audioLink" target="_blank" style="flex: 1; text-align: center;">🔊 View Audio File</a>
+                    <a id="transcriptLink" target="_blank" style="flex: 1; text-align: center;">📄 View Transcript JSON</a>
+                </div>
+                <p style="margin-top: 10px; font-size: 0.85em; color: #999;">
+                    Click links above to access your files (pre-signed URLs valid for 1 hour)
+                </p>
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #f0f0f0; text-align: center;">
+            <p style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
+                <strong>Learn more:</strong>
+            </p>
+            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                <a href="https://huggingface.co/docs/transformers.js" target="_blank" style="color: #667eea; text-decoration: none; font-size: 0.9em;">
+                    📚 Transformers.js Docs
+                </a>
+                <a href="https://www.backblaze.com/b2/cloud-storage.html" target="_blank" style="color: #667eea; text-decoration: none; font-size: 0.9em;">
+                    ☁️ Backblaze B2 Storage
+                </a>
+                <a href="https://github.com/xenova/transformers.js" target="_blank" style="color: #667eea; text-decoration: none; font-size: 0.9em;">
+                    💻 Transformers.js GitHub
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+        let selectedFile = null;
+        let audioUrl = null;
+        let fileId = null;
+        let whisperPipeline = null;
+
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const transcribeBtn = document.getElementById('transcribeBtn');
+        const status = document.getElementById('status');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const result = document.getElementById('result');
+
+        // API is served from same origin
+        const API_BASE = window.location.origin;
+
+        function showStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = 'status show ' + type;
+        }
+
+        function setProgress(percent) {
+            progressContainer.style.display = 'block';
+            progressBar.style.width = percent + '%';
+        }
+
+        function hideProgress() {
+            progressContainer.style.display = 'none';
+        }
+
+        // File upload handling
+        uploadZone.addEventListener('click', () => fileInput.click());
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        async function handleFileSelect(file) {
+            if (!file.type.startsWith('audio/')) {
+                showStatus('Please select an audio file', 'error');
+                return;
+            }
+
+            selectedFile = file;
+            showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+
+            // Upload to B2 immediately
+            await uploadToB2();
+        }
+
+        async function uploadToB2() {
+            try {
+                showStatus('Uploading audio to B2...', 'info');
+                setProgress(10);
+
+                // Get pre-signed URL for audio
+                const response = await fetch(`${API_BASE}/api/presign-audio`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: selectedFile.name,
+                        contentType: selectedFile.type
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get pre-signed URL');
+                }
+
+                const { uploadUrl, publicUrl, fileId: id } = await response.json();
+                fileId = id;
+
+                setProgress(30);
+
+                // Upload audio to B2
+                const uploadResponse = await fetch(uploadUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': selectedFile.type },
+                    body: selectedFile
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error('Failed to upload audio to B2');
+                }
+
+                audioUrl = publicUrl;
+                setProgress(50);
+                showStatus('Audio uploaded to B2 successfully!', 'success');
+                hideProgress();
+                transcribeBtn.disabled = false;
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                showStatus('Error uploading to B2: ' + error.message, 'error');
+                hideProgress();
+            }
+        }
+
+        transcribeBtn.addEventListener('click', async () => {
+            try {
+                transcribeBtn.disabled = true;
+                result.classList.remove('show');
+                showStatus('Loading Whisper model (first time may take a minute)...', 'info');
+                setProgress(60);
+
+                // Load Whisper model
+                if (!whisperPipeline) {
+                    whisperPipeline = await pipeline(
+                        'automatic-speech-recognition',
+                        'Xenova/whisper-tiny.en',
+                        { dtype: 'q8' }
+                    );
+                }
+
+                setProgress(70);
+                showStatus('Transcribing audio (this may take a while for long files)...', 'info');
+
+                // Transcribe audio directly from URL
+                // chunk_length_s: Process audio in 30-second chunks for full transcription
+                // stride_length_s: 5-second overlap between chunks for continuity
+                const transcriptionResult = await whisperPipeline(audioUrl, {
+                    chunk_length_s: 30,
+                    stride_length_s: 5,
+                    return_timestamps: true
+                });
+
+                setProgress(90);
+                showStatus('Saving transcript to B2...', 'info');
+
+                // Get pre-signed URL for transcript
+                const presignResponse = await fetch(`${API_BASE}/api/presign-transcript`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileId })
+                });
+
+                if (!presignResponse.ok) {
+                    throw new Error('Failed to get transcript pre-signed URL');
+                }
+
+                const { uploadUrl: transcriptUploadUrl, publicUrl: transcriptPublicUrl } = await presignResponse.json();
+
+                // Upload transcript to B2
+                const transcriptData = {
+                    audioSource: audioUrl,
+                    transcription: transcriptionResult,
+                    timestamp: new Date().toISOString(),
+                    filename: selectedFile.name
+                };
+
+                const transcriptUploadResponse = await fetch(transcriptUploadUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(transcriptData, null, 2)
+                });
+
+                if (!transcriptUploadResponse.ok) {
+                    throw new Error('Failed to upload transcript to B2');
+                }
+
+                setProgress(100);
+                showStatus('Transcription complete!', 'success');
+
+                // Display results
+                document.getElementById('transcriptText').textContent = transcriptionResult.text;
+                document.getElementById('audioLink').href = audioUrl;
+                document.getElementById('transcriptLink').href = transcriptPublicUrl;
+                result.classList.add('show');
+
+                hideProgress();
+                transcribeBtn.disabled = false;
+
+            } catch (error) {
+                console.error('Transcription error:', error);
+                showStatus('Error during transcription: ' + error.message, 'error');
+                hideProgress();
+                transcribeBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
