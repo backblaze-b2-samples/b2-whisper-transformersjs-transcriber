@@ -1,6 +1,6 @@
 # 🎤 B2 + Whisper Browser Transcriber
 
-Client-side Speech-to-Text demo using [Transformers.js](https://huggingface.co/docs/transformers.js) and [Backblaze B2](https://www.backblaze.com/b2/cloud-storage.html) cloud storage.
+Client-side Speech-to-Text demo using [Transformers.js](https://huggingface.co/docs/transformers.js) and [Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples) cloud storage.
 
 Run [OpenAI's Whisper](https://openai.com/research/whisper) entirely in your browser - no server GPU needed, with audio files and transcripts stored in cost-effective B2 storage.
 
@@ -8,7 +8,7 @@ Run [OpenAI's Whisper](https://openai.com/research/whisper) entirely in your bro
 
 - **[Transformers.js](https://huggingface.co/docs/transformers.js)** - Run AI models like Whisper in the browser with WebAssembly
 - **[Whisper](https://github.com/openai/whisper)** - OpenAI's automatic speech recognition model
-- **[Backblaze B2](https://www.backblaze.com/b2/cloud-storage.html)** - S3-compatible cloud storage at $6/TB/month
+- **[Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** - S3-compatible cloud storage at $6/TB/month
 
 ## ✨ What This Demonstrates
 
@@ -42,7 +42,7 @@ Browser Whisper (Transformers.js) → Transcribe
 ### Prerequisites
 
 - **Node.js 18+**
-- **[Backblaze B2 Account](https://www.backblaze.com/sign-up/cloud-storage)** (free tier available)
+- **[Backblaze B2 Account](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** (free tier available)
   - Create a bucket
   - Generate an Application Key with `readFiles`, `writeFiles`, `writeBuckets` permissions
 
@@ -60,7 +60,7 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` with your [B2 credentials](https://www.backblaze.com/b2/docs/quick_account.html):
+Edit `.env` with your [B2 credentials](https://www.backblaze.com/docs/cloud-storage-enable-backblaze-b2?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples):
 
 ```env
 B2_ENDPOINT=https://s3.us-west-002.backblazeb2.com
@@ -70,7 +70,7 @@ B2_APP_KEY=your_app_key_here
 B2_BUCKET=your-bucket-name
 ```
 
-> Get your B2 endpoint and region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm)
+> Get your B2 endpoint and region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)
 
 ### 3. Start the App
 
@@ -247,10 +247,10 @@ Response:
 
 ### Storage
 
-- **Provider**: [Backblaze B2](https://www.backblaze.com/b2/cloud-storage.html)
+- **Provider**: [Backblaze B2](https://www.backblaze.com/b2/cloud-storage.html?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)
 - **API**: S3-compatible API with pre-signed URLs
 - **Pricing**: $6/TB/month storage, uploads are FREE
-- **Documentation**: [B2 S3-Compatible API Docs](https://www.backblaze.com/b2/docs/s3_compatible_api.html)
+- **Documentation**: [B2 S3-Compatible API Docs](https://www.backblaze.com/b2/docs/s3_compatible_api.html?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)
 
 ### Supported Audio Formats
 
@@ -287,8 +287,8 @@ Requires WebAssembly and ES6 modules support.
 
 - **[Transformers.js Documentation](https://huggingface.co/docs/transformers.js)** - Run AI models in the browser
 - **[Transformers.js GitHub](https://github.com/xenova/transformers.js)** - Source code and examples
-- **[Backblaze B2 Documentation](https://www.backblaze.com/b2/docs/)** - Cloud storage API docs
-- **[B2 S3-Compatible API](https://www.backblaze.com/b2/docs/s3_compatible_api.html)** - S3 compatibility guide
+- **[Backblaze B2 Documentation](https://www.backblaze.com/b2/docs/?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** - Cloud storage API docs
+- **[B2 S3-Compatible API](https://www.backblaze.com/b2/docs/s3_compatible_api.html?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** - S3 compatibility guide
 - **[OpenAI Whisper](https://github.com/openai/whisper)** - Original Whisper model
 - **[Whisper Models on Hugging Face](https://huggingface.co/models?search=whisper)** - Pre-trained models
 
