@@ -349,7 +349,7 @@
                 // Upload audio to B2
                 const uploadResponse = await fetch(uploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': selectedFile.type },
+                    headers: { 'Content-Type': selectedFile.type, 'User-Agent': "b2ai-transformersjs" },
                     body: selectedFile
                 });
 
@@ -424,7 +424,7 @@
 
                 const transcriptUploadResponse = await fetch(transcriptUploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'User-Agent': "b2ai-transformersjs" },
                     body: JSON.stringify(transcriptData, null, 2)
                 });
 
