@@ -1,4 +1,4 @@
-# 🎤 B2 + Whisper Browser Transcriber
+# 🎤 B2 + Whisper Browser Transcriber Example Demo
 
 Client-side Speech-to-Text demo using [Transformers.js](https://huggingface.co/docs/transformers.js) and [Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples) cloud storage.
 
