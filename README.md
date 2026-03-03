@@ -1,21 +1,27 @@
-# 🎤 B2 + Whisper Browser Transcriber Example Demo
+# OpenAI Whisper Speech-to-Text Transcription in the Browser with Backblaze B2
 
-Client-side Speech-to-Text demo using [Transformers.js](https://huggingface.co/docs/transformers.js) and [Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples) cloud storage.
+A JavaScript example app that runs [OpenAI's Whisper](https://openai.com/research/whisper) automatic speech recognition (ASR) model entirely in the browser using [Transformers.js](https://huggingface.co/docs/transformers.js) and WebAssembly — no server GPU required. Audio files and transcripts are stored in [Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples) cloud storage.
 
-Run [OpenAI's Whisper](https://openai.com/research/whisper) entirely in your browser - no server GPU needed, with audio files and transcripts stored in cost-effective B2 storage.
+Upload audio (MP3, WAV, M4A, FLAC, OGG, WEBM), transcribe it to text client-side with Whisper, and save both the recording and the transcript to S3-compatible Backblaze B2 object storage — all from a single-page web app.
 
-## 🚀 Technologies
+## Why Client-Side Whisper?
 
-- **[Transformers.js](https://huggingface.co/docs/transformers.js)** - Run AI models like Whisper in the browser with WebAssembly
-- **[Whisper](https://github.com/openai/whisper)** - OpenAI's automatic speech recognition model
-- **[Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** - S3-compatible cloud storage at $6/TB/month
+- **No GPU server costs** — the Whisper model runs in your browser via WebAssembly, so there's no inference server to provision or pay for
+- **Privacy** — audio never leaves the user's device for transcription
+- **Simple to deploy** — a static frontend + a lightweight Node.js backend for pre-signed URLs is all you need
 
-## ✨ What This Demonstrates
+## Technologies
 
-- **Client-side AI**: Run Whisper entirely in browser (no server GPU required)
-- **Cost-effective Storage**: Store audio and transcripts in Backblaze B2
-- **Secure Uploads**: Direct browser-to-cloud uploads with pre-signed URLs
-- **Simple Architecture**: Complete flow from upload → transcribe → store
+- **[Transformers.js](https://huggingface.co/docs/transformers.js)** — Run Hugging Face AI models like Whisper in the browser with WebAssembly
+- **[OpenAI Whisper](https://github.com/openai/whisper)** — State-of-the-art open-source automatic speech recognition (ASR) model
+- **[Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** — S3-compatible cloud object storage at $6/TB/month
+
+## What This Demonstrates
+
+- **Client-side AI transcription**: Run OpenAI Whisper entirely in the browser — no server GPU required
+- **Cost-effective cloud storage**: Store audio files and transcripts in Backblaze B2
+- **Secure direct uploads**: Browser-to-cloud uploads using S3 pre-signed URLs
+- **Simple architecture**: End-to-end flow from upload → transcribe → store
 
 ## Architecture
 
@@ -37,7 +43,7 @@ Browser Whisper (Transformers.js) → Transcribe
 6. Backend generates pre-signed PUT URL for transcript
 7. Browser uploads transcript JSON to B2
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -235,15 +241,17 @@ Response:
 }
 ```
 
-## 🔧 Technical Details
+## Technical Details
 
 ### Whisper Model
 
+This example uses the [Xenova/whisper-tiny.en](https://huggingface.co/Xenova/whisper-tiny.en) model, a quantized version of OpenAI's Whisper optimized for in-browser inference via Transformers.js. You can swap it for larger Whisper variants (base, small, medium) for higher accuracy at the cost of longer load times.
+
 - **Model**: [Xenova/whisper-tiny.en](https://huggingface.co/Xenova/whisper-tiny.en) (English only, 39M params)
-- **Library**: [Transformers.js](https://huggingface.co/docs/transformers.js) - Run transformers in the browser
-- **Quantization**: q8 (8-bit) for speed
-- **Size**: ~40MB download (cached in browser)
-- **Speed**: ~30 seconds for 1 minute audio
+- **Library**: [Transformers.js](https://huggingface.co/docs/transformers.js) — Run Hugging Face transformer models in the browser
+- **Quantization**: q8 (8-bit) for faster WebAssembly inference
+- **Size**: ~40MB download (cached in browser after first load)
+- **Speed**: ~30 seconds to transcribe 1 minute of audio
 
 ### Storage
 
@@ -273,7 +281,7 @@ Requires WebAssembly and ES6 modules support.
 - Browser must stay open during transcription
 - Large files (>30min) may be slow
 
-## 🎯 Potential Improvements
+## Potential Improvements
 
 - [ ] Add recording directly in browser (MediaRecorder API)
 - [ ] Support larger Whisper models (base, small, medium)
@@ -283,14 +291,14 @@ Requires WebAssembly and ES6 modules support.
 - [ ] Speaker diarization
 - [ ] Multi-language support using `Xenova/whisper-tiny` (not `-tiny.en`)
 
-## 📚 Learn More
+## Related Resources
 
-- **[Transformers.js Documentation](https://huggingface.co/docs/transformers.js)** - Run AI models in the browser
-- **[Transformers.js GitHub](https://github.com/xenova/transformers.js)** - Source code and examples
-- **[Backblaze B2 Documentation](https://www.backblaze.com/b2/docs/?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** - Cloud storage API docs
-- **[B2 S3-Compatible API](https://www.backblaze.com/b2/docs/s3_compatible_api.html?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** - S3 compatibility guide
-- **[OpenAI Whisper](https://github.com/openai/whisper)** - Original Whisper model
-- **[Whisper Models on Hugging Face](https://huggingface.co/models?search=whisper)** - Pre-trained models
+- **[Transformers.js Documentation](https://huggingface.co/docs/transformers.js)** — Run Hugging Face AI models in the browser with WebAssembly
+- **[Transformers.js GitHub](https://github.com/xenova/transformers.js)** — Source code and examples
+- **[OpenAI Whisper](https://github.com/openai/whisper)** — Original Whisper automatic speech recognition model
+- **[Whisper Models on Hugging Face](https://huggingface.co/models?search=whisper)** — Pre-trained Whisper model variants (tiny, base, small, medium, large)
+- **[Backblaze B2 Documentation](https://www.backblaze.com/b2/docs/?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** — Cloud storage API docs
+- **[B2 S3-Compatible API](https://www.backblaze.com/b2/docs/s3_compatible_api.html?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)** — Use standard S3 SDKs with Backblaze B2
 
 ## Troubleshooting
 

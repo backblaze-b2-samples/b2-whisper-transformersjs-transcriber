@@ -11,7 +11,7 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f"
   },
-  "keywords": ["whisper", "b2", "backblaze", "transcription", "speech-to-text"],
+  "keywords": ["whisper", "openai-whisper", "speech-to-text", "transcription", "audio-transcription", "asr", "automatic-speech-recognition", "transformers-js", "webassembly", "backblaze", "b2", "s3", "cloud-storage", "javascript", "client-side-ai", "browser-ai"],
   "author": "",
   "license": "MIT"
 }
