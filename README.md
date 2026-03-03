@@ -56,7 +56,7 @@ Browser Whisper (Transformers.js) → Transcribe
 
 ```bash
 git clone https://github.com/backblaze-b2-samples/b2-whisper-transformersjs-transcriber.git
-cd b2-whisper-transcriber/backend
+cd b2-whisper-transformersjs-transcriber/backend
 npm install
 ```
 
