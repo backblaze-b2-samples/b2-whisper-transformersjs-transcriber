@@ -9,6 +9,9 @@
     "setup-cors": "node setup-cors.js",
     "force-cors": "node force-cors.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.682.0",
     "@aws-sdk/s3-request-presigner": "^3.682.0",

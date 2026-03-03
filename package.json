@@ -12,6 +12,13 @@
     "docker:logs": "docker-compose logs -f"
   },
   "keywords": ["whisper", "openai-whisper", "speech-to-text", "transcription", "audio-transcription", "asr", "automatic-speech-recognition", "transformers-js", "webassembly", "backblaze", "b2", "s3", "cloud-storage", "javascript", "client-side-ai", "browser-ai"],
-  "author": "",
-  "license": "MIT"
+  "author": "Backblaze",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/backblaze-b2-samples/b2-whisper-transcriber"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }

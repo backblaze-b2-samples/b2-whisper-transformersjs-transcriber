@@ -3,8 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Transcribe audio to text in your browser using OpenAI Whisper and Backblaze B2 cloud storage. No server GPU needed.">
     <title>B2 + Whisper Transcriber</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🎤</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -13,54 +17,101 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: oklch(0.97 0.003 265);
+            color: oklch(0.16 0.02 265);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 24px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
         }
 
         .container {
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 800px;
+            border-radius: 12px;
+            border: 1px solid oklch(0.92 0.005 260);
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+            max-width: 720px;
             width: 100%;
-            padding: 40px;
+            padding: 32px;
         }
 
         h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 2em;
+            color: oklch(0.16 0.02 265);
+            margin-bottom: 6px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            line-height: 1.2;
         }
 
         .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 0.95em;
+            color: oklch(0.44 0.02 260);
+            margin-bottom: 24px;
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
+        .info-box {
+            background: oklch(0.97 0.003 265);
+            border: 1px solid oklch(0.92 0.005 260);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            color: oklch(0.44 0.02 260);
+        }
+
+        .info-box strong {
+            color: oklch(0.16 0.02 265);
         }
 
         .upload-zone {
-            border: 3px dashed #667eea;
-            border-radius: 15px;
-            padding: 40px;
+            border: 2px dashed oklch(0.44 0.02 260 / 0.25);
+            border-radius: 8px;
+            padding: 48px 24px;
             text-align: center;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: border-color 0.15s, background-color 0.15s;
             margin-bottom: 20px;
         }
 
         .upload-zone:hover {
-            border-color: #764ba2;
-            background: #f8f9ff;
+            border-color: oklch(0.44 0.27 275 / 0.5);
+            background: oklch(0.44 0.27 275 / 0.02);
+        }
+
+        .upload-zone:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px oklch(0.44 0.27 275 / 0.3);
         }
 
         .upload-zone.dragover {
-            background: #f0f0ff;
-            border-color: #764ba2;
+            border-color: oklch(0.44 0.27 275);
+            background: oklch(0.44 0.27 275 / 0.05);
+        }
+
+        .upload-zone h3 {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: oklch(0.16 0.02 265);
+        }
+
+        .upload-zone .upload-hint {
+            color: oklch(0.44 0.02 260);
+            margin-top: 8px;
+            font-size: 0.8125rem;
+        }
+
+        .upload-zone .upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 8px;
+            line-height: 1;
         }
 
         input[type="file"] {
@@ -68,19 +119,26 @@
         }
 
         button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: oklch(0.44 0.27 275);
             color: white;
             border: none;
-            padding: 12px 30px;
-            border-radius: 8px;
-            font-size: 1em;
+            padding: 9px 20px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            font-family: inherit;
             cursor: pointer;
-            transition: transform 0.2s;
-            margin: 5px;
+            transition: background-color 0.15s;
+            margin: 4px;
         }
 
         button:hover:not(:disabled) {
-            transform: translateY(-2px);
+            background: oklch(0.38 0.27 275);
+        }
+
+        button:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px oklch(0.44 0.27 275 / 0.3);
         }
 
         button:disabled {
@@ -89,11 +147,12 @@
         }
 
         .status {
-            background: #f8f9ff;
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 5px;
+            background: oklch(0.97 0.003 265);
+            border: 1px solid oklch(0.92 0.005 260);
+            padding: 12px 16px;
+            margin: 16px 0;
+            border-radius: 8px;
+            font-size: 0.875rem;
             display: none;
         }
 
@@ -102,34 +161,38 @@
         }
 
         .status.error {
-            background: #fff5f5;
-            border-left-color: #e53e3e;
+            background: oklch(0.97 0.01 25);
+            border-color: oklch(0.55 0.22 25 / 0.3);
+            color: oklch(0.45 0.18 25);
         }
 
         .status.success {
-            background: #f0fff4;
-            border-left-color: #38a169;
+            background: oklch(0.97 0.01 155);
+            border-color: oklch(0.58 0.15 155 / 0.3);
+            color: oklch(0.38 0.12 155);
         }
 
         .progress {
-            background: #e0e0e0;
-            border-radius: 10px;
-            height: 8px;
+            background: oklch(0.92 0.005 260);
+            border-radius: 999px;
+            height: 6px;
             overflow: hidden;
-            margin: 10px 0;
+            margin: 12px 0;
         }
 
         .progress-bar {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            background: oklch(0.44 0.27 275);
             height: 100%;
             width: 0%;
+            border-radius: 999px;
             transition: width 0.3s;
         }
 
         .result {
-            background: #f8f9ff;
+            background: oklch(0.97 0.003 265);
+            border: 1px solid oklch(0.92 0.005 260);
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 8px;
             margin-top: 20px;
             display: none;
         }
@@ -139,37 +202,97 @@
         }
 
         .result h3 {
-            color: #333;
-            margin-bottom: 15px;
+            color: oklch(0.16 0.02 265);
+            margin-bottom: 12px;
+            font-size: 0.9375rem;
+            font-weight: 600;
         }
 
         .transcript-text {
             background: white;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
+            padding: 16px;
+            border-radius: 6px;
+            border: 1px solid oklch(0.92 0.005 260);
             line-height: 1.6;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
+            font-size: 0.875rem;
+        }
+
+        .result-footer {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid oklch(0.92 0.005 260);
+        }
+
+        .result-footer-label {
+            margin-bottom: 10px;
+            font-weight: 600;
+            font-size: 0.8125rem;
+            color: oklch(0.44 0.02 260);
         }
 
         .links {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
         .links a {
-            color: #667eea;
+            color: oklch(0.44 0.27 275);
             text-decoration: none;
-            padding: 8px 16px;
-            border: 1px solid #667eea;
-            border-radius: 5px;
-            font-size: 0.9em;
+            padding: 7px 14px;
+            border: 1px solid oklch(0.92 0.005 260);
+            border-radius: 6px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            background: white;
+            transition: background-color 0.15s, border-color 0.15s;
         }
 
         .links a:hover {
-            background: #667eea;
-            color: white;
+            background: oklch(0.97 0.003 265);
+            border-color: oklch(0.44 0.27 275 / 0.3);
+        }
+
+        .links-hint {
+            margin-top: 8px;
+            font-size: 0.75rem;
+            color: oklch(0.44 0.02 260);
+        }
+
+        .footer {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid oklch(0.92 0.005 260);
+            text-align: center;
+        }
+
+        .footer-label {
+            color: oklch(0.44 0.02 260);
+            font-size: 0.8125rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: oklch(0.44 0.27 275);
+            text-decoration: none;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            transition: color 0.15s;
+        }
+
+        .footer-links a:hover {
+            color: oklch(0.38 0.27 275);
+            text-decoration: underline;
+            text-underline-offset: 4px;
         }
 
         @media (max-width: 600px) {
@@ -177,31 +300,33 @@
                 padding: 20px;
             }
             h1 {
-                font-size: 1.5em;
+                font-size: 1.25rem;
+            }
+            .upload-zone {
+                padding: 32px 16px;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎤 B2 + Whisper Transcriber</h1>
+        <h1>B2 + Whisper Transcriber</h1>
         <p class="subtitle">Client-side Speech-to-Text Demo using Transformers.js + Backblaze B2</p>
 
-        <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin-bottom: 25px; border-radius: 5px;">
-            <p style="margin: 0; line-height: 1.6; color: #555; font-size: 0.95em;">
-                <strong>🚀 What this demonstrates:</strong><br>
-                • <strong>Transformers.js</strong> - Run OpenAI's Whisper AI model entirely in your browser (no server GPU needed)<br>
-                • <strong>Backblaze B2</strong> - Cost-effective cloud storage with S3-compatible API<br>
-                • <strong>Pre-signed URLs</strong> - Secure direct browser-to-cloud uploads without exposing credentials<br>
-                <br>
-                Everything runs client-side. Your audio never touches our server.
+        <div class="info-box">
+            <p>
+                <strong>What this demonstrates:</strong><br>
+                &bull; <strong>Transformers.js</strong> &mdash; Run OpenAI's Whisper AI model entirely in your browser (no server GPU needed)<br>
+                &bull; <strong>Backblaze B2</strong> &mdash; Cost-effective cloud storage with S3-compatible API<br>
+                &bull; <strong>Pre-signed URLs</strong> &mdash; Secure direct browser-to-cloud uploads without exposing credentials
             </p>
+            <p style="margin-top: 8px;">Everything runs client-side. Your audio never touches our server.</p>
         </div>
 
-        <div class="upload-zone" id="uploadZone">
-            <div style="font-size: 3em; margin-bottom: 10px;">🎵</div>
+        <div class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-label="Upload audio file. Drop a file here or press Enter to browse.">
+            <div class="upload-icon">🎵</div>
             <h3>Drop audio file here or click to browse</h3>
-            <p style="color: #999; margin-top: 10px;">Supports: MP3, WAV, OGG, M4A, WEBM</p>
+            <p class="upload-hint">Supports: MP3, WAV, OGG, M4A, WEBM</p>
             <input type="file" id="fileInput" accept="audio/*">
         </div>
 
@@ -209,42 +334,34 @@
             <button id="transcribeBtn" disabled>Transcribe with Whisper</button>
         </div>
 
-        <div class="status" id="status"></div>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
 
-        <div class="progress" id="progressContainer" style="display: none;">
+        <div class="progress" id="progressContainer" style="display: none;" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="progress-bar" id="progressBar"></div>
         </div>
 
         <div class="result" id="result">
-            <h3>✅ Transcription Complete</h3>
+            <h3>Transcription Complete</h3>
             <div class="transcript-text" id="transcriptText"></div>
 
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                <p style="margin-bottom: 10px; font-weight: 600; color: #555;">📦 Files stored in Backblaze B2:</p>
+            <div class="result-footer">
+                <p class="result-footer-label">Files stored in Backblaze B2:</p>
                 <div class="links">
-                    <a id="audioLink" target="_blank" style="flex: 1; text-align: center;">🔊 View Audio File</a>
-                    <a id="transcriptLink" target="_blank" style="flex: 1; text-align: center;">📄 View Transcript JSON</a>
+                    <a id="audioLink" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center;">View Audio File</a>
+                    <a id="transcriptLink" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center;">View Transcript JSON</a>
                 </div>
-                <p style="margin-top: 10px; font-size: 0.85em; color: #999;">
+                <p class="links-hint">
                     Click links above to access your files (pre-signed URLs valid for 1 hour)
                 </p>
             </div>
         </div>
 
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #f0f0f0; text-align: center;">
-            <p style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
-                <strong>Learn more:</strong>
-            </p>
-            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
-                <a href="https://huggingface.co/docs/transformers.js" target="_blank" style="color: #667eea; text-decoration: none; font-size: 0.9em;">
-                    📚 Transformers.js Docs
-                </a>
-                <a href="https://www.backblaze.com/b2/cloud-storage.html" target="_blank" style="color: #667eea; text-decoration: none; font-size: 0.9em;">
-                    ☁️ Backblaze B2 Storage
-                </a>
-                <a href="https://github.com/xenova/transformers.js" target="_blank" style="color: #667eea; text-decoration: none; font-size: 0.9em;">
-                    💻 Transformers.js GitHub
-                </a>
+        <div class="footer">
+            <p class="footer-label">Learn more</p>
+            <div class="footer-links">
+                <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener noreferrer">Transformers.js Docs</a>
+                <a href="https://www.backblaze.com/b2/cloud-storage.html" target="_blank" rel="noopener noreferrer">Backblaze B2 Storage</a>
+                <a href="https://github.com/xenova/transformers.js" target="_blank" rel="noopener noreferrer">Transformers.js GitHub</a>
             </div>
         </div>
     </div>
@@ -260,7 +377,7 @@
         const uploadZone = document.getElementById('uploadZone');
         const fileInput = document.getElementById('fileInput');
         const transcribeBtn = document.getElementById('transcribeBtn');
-        const status = document.getElementById('status');
+        const statusEl = document.getElementById('status');
         const progressContainer = document.getElementById('progressContainer');
         const progressBar = document.getElementById('progressBar');
         const result = document.getElementById('result');
@@ -268,14 +385,41 @@
         // API is served from same origin
         const API_BASE = window.location.origin;
 
+        // 2.10 — Max file size (100 MB)
+        const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
+        // 2.12 — Named progress constants
+        const PROGRESS = {
+            UPLOAD_START: 10,
+            PRESIGN_DONE: 30,
+            UPLOAD_DONE: 50,
+            MODEL_LOADING: 60,
+            TRANSCRIBING: 70,
+            SAVING: 90,
+            COMPLETE: 100,
+        };
+
+        // 2.9 — Fetch with timeout via AbortController
+        function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeoutMs);
+            return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+        }
+
+        // 2.15 — Use classList for status type safety
         function showStatus(message, type = 'info') {
-            status.textContent = message;
-            status.className = 'status show ' + type;
+            statusEl.textContent = message;
+            statusEl.classList.remove('error', 'success');
+            if (type === 'error' || type === 'success') {
+                statusEl.classList.add(type);
+            }
+            statusEl.classList.add('show');
         }
 
         function setProgress(percent) {
             progressContainer.style.display = 'block';
             progressBar.style.width = percent + '%';
+            progressContainer.setAttribute('aria-valuenow', percent);
         }
 
         function hideProgress() {
@@ -284,6 +428,14 @@
 
         // File upload handling
         uploadZone.addEventListener('click', () => fileInput.click());
+
+        // 3.3 — Keyboard handler for upload zone
+        uploadZone.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInput.click();
+            }
+        });
 
         uploadZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -315,6 +467,12 @@
                 return;
             }
 
+            // 2.10 — File size validation
+            if (file.size > MAX_FILE_SIZE) {
+                showStatus('File too large. Maximum size is 100 MB.', 'error');
+                return;
+            }
+
             selectedFile = file;
             showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
 
@@ -325,10 +483,10 @@
         async function uploadToB2() {
             try {
                 showStatus('Uploading audio to B2...', 'info');
-                setProgress(10);
+                setProgress(PROGRESS.UPLOAD_START);
 
                 // Get pre-signed URL for audio
-                const response = await fetch(`${API_BASE}/api/presign-audio`, {
+                const response = await fetchWithTimeout(`${API_BASE}/api/presign-audio`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -344,28 +502,29 @@
                 const { uploadUrl, publicUrl, fileId: id } = await response.json();
                 fileId = id;
 
-                setProgress(30);
+                setProgress(PROGRESS.PRESIGN_DONE);
 
-                // Upload audio to B2
-                const uploadResponse = await fetch(uploadUrl, {
+                // Upload audio to B2 (120s timeout for large files)
+                const uploadResponse = await fetchWithTimeout(uploadUrl, {
                     method: 'PUT',
                     headers: { 'Content-Type': selectedFile.type, 'User-Agent': "b2ai-transformersjs" },
                     body: selectedFile
-                });
+                }, 120000);
 
                 if (!uploadResponse.ok) {
                     throw new Error('Failed to upload audio to B2');
                 }
 
                 audioUrl = publicUrl;
-                setProgress(50);
+                setProgress(PROGRESS.UPLOAD_DONE);
                 showStatus('Audio uploaded to B2 successfully!', 'success');
                 hideProgress();
                 transcribeBtn.disabled = false;
 
             } catch (error) {
                 console.error('Upload error:', error);
-                showStatus('Error uploading to B2: ' + error.message, 'error');
+                const msg = error.name === 'AbortError' ? 'Upload timed out' : 'Error uploading to B2: ' + error.message;
+                showStatus(msg, 'error');
                 hideProgress();
             }
         }
@@ -375,7 +534,7 @@
                 transcribeBtn.disabled = true;
                 result.classList.remove('show');
                 showStatus('Loading Whisper model (first time may take a minute)...', 'info');
-                setProgress(60);
+                setProgress(PROGRESS.MODEL_LOADING);
 
                 // Load Whisper model
                 if (!whisperPipeline) {
@@ -386,23 +545,21 @@
                     );
                 }
 
-                setProgress(70);
+                setProgress(PROGRESS.TRANSCRIBING);
                 showStatus('Transcribing audio (this may take a while for long files)...', 'info');
 
                 // Transcribe audio directly from URL
-                // chunk_length_s: Process audio in 30-second chunks for full transcription
-                // stride_length_s: 5-second overlap between chunks for continuity
                 const transcriptionResult = await whisperPipeline(audioUrl, {
                     chunk_length_s: 30,
                     stride_length_s: 5,
                     return_timestamps: true
                 });
 
-                setProgress(90);
+                setProgress(PROGRESS.SAVING);
                 showStatus('Saving transcript to B2...', 'info');
 
                 // Get pre-signed URL for transcript
-                const presignResponse = await fetch(`${API_BASE}/api/presign-transcript`, {
+                const presignResponse = await fetchWithTimeout(`${API_BASE}/api/presign-transcript`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ fileId })
@@ -422,17 +579,18 @@
                     filename: selectedFile.name
                 };
 
-                const transcriptUploadResponse = await fetch(transcriptUploadUrl, {
+                // 2.11 — Compact JSON (no pretty-print for upload)
+                const transcriptUploadResponse = await fetchWithTimeout(transcriptUploadUrl, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'User-Agent': "b2ai-transformersjs" },
-                    body: JSON.stringify(transcriptData, null, 2)
-                });
+                    body: JSON.stringify(transcriptData)
+                }, 120000);
 
                 if (!transcriptUploadResponse.ok) {
                     throw new Error('Failed to upload transcript to B2');
                 }
 
-                setProgress(100);
+                setProgress(PROGRESS.COMPLETE);
                 showStatus('Transcription complete!', 'success');
 
                 // Display results
@@ -446,7 +604,8 @@
 
             } catch (error) {
                 console.error('Transcription error:', error);
-                showStatus('Error during transcription: ' + error.message, 'error');
+                const msg = error.name === 'AbortError' ? 'Request timed out' : 'Error during transcription: ' + error.message;
+                showStatus(msg, 'error');
                 hideProgress();
                 transcribeBtn.disabled = false;
             }
