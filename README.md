@@ -4,6 +4,8 @@ A JavaScript example app that runs [OpenAI's Whisper](https://openai.com/researc
 
 Upload audio (MP3, WAV, M4A, FLAC, OGG, WEBM), transcribe it to text client-side with Whisper, and save both the recording and the transcript to S3-compatible Backblaze B2 object storage — all from a single-page web app.
 
+![alt text](docs/screenshot.png)
+
 ## Why Client-Side Whisper?
 
 - **No GPU server costs** — the Whisper model runs in your browser via WebAssembly, so there's no inference server to provision or pay for
