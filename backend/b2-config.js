@@ -1,6 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3';
 
-export const B2_SAMPLE_USER_AGENT = 'b2-whisper-transformersjs-transcriber (backblaze-b2-samples)';
+export const B2_SAMPLE_USER_AGENT = 'b2ai-whisper-transformersjs-transcriber (backblaze-b2-samples)';
 
 const REQUIRED_SETTINGS = [
   {

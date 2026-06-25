@@ -200,6 +200,7 @@ test('getB2PublicUrl returns encoded public URLs when configured', () => {
 });
 
 test('createB2S3Client sets the Backblaze sample custom user agent', () => {
+  assert.match(B2_SAMPLE_USER_AGENT, /^b2ai-/);
   assert.match(B2_SAMPLE_USER_AGENT, /\(backblaze-b2-samples\)/);
 
   const settings = {

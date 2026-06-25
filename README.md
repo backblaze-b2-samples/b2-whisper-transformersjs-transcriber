@@ -223,7 +223,7 @@ Or use B2 Web UI → App Keys → Create Key
 
 ### POST /api/presign-audio
 
-Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and a trusted `Origin` when sent from a browser.
+Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and a trusted `Origin` when sent from a browser. The bearer header is the only supported presign-auth transport.
 
 Request:
 ```json
@@ -247,7 +247,7 @@ Response:
 
 ### POST /api/presign-transcript
 
-Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and the `transcriptToken` returned by `/api/presign-audio`. The transcript token expires with `URL_EXPIRY`; increase `URL_EXPIRY` for long or delayed transcriptions.
+Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and the `transcriptToken` returned by `/api/presign-audio`. By default, the transcript token expires with `URL_EXPIRY`; set `transcriptTokenTtlMs` in server code if you need a different lifetime.
 
 Request:
 ```json

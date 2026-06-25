@@ -419,6 +419,8 @@
 
         // API is served from same origin
         const API_BASE = window.location.origin;
+        // Sample convenience: keep the operator-provided presign token only for
+        // this browser session. Production forks should prefer server-side auth.
         const PRESIGN_AUTH_STORAGE_KEY = 'b2-whisper-presign-token';
 
         authTokenInput.value = sessionStorage.getItem(PRESIGN_AUTH_STORAGE_KEY) || '';

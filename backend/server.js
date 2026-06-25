@@ -195,7 +195,7 @@ function createPresignAuth({ allowedOrigins = [], authToken }) {
 
     const auth = req.get('authorization') || '';
     const match = auth.match(/^Bearer\s+(.+)$/i);
-    const suppliedToken = match ? match[1] : req.get('x-presign-auth-token');
+    const suppliedToken = match ? match[1] : '';
     if (!stringsMatch(authToken, suppliedToken)) {
       res.status(401).json({ error: 'Presign authentication required' });
       return;
@@ -255,6 +255,8 @@ export function createApp({
   const bucket = b2Settings.bucketName;
   const trustedOrigins = normalizeAllowedOrigins(allowedOrigins);
   const presignObjectUrls = presignUrls || createPresignHelper(s3Client, b2Settings, urlExpiry);
+  // Transcript tokens default to the presigned URL lifetime; override
+  // transcriptTokenTtlMs if long-lived URLs should not imply long-lived tokens.
   const tokenTtlMs = transcriptTokenTtlMs || urlExpiry * 1000;
   const presignMiddlewares = [
     ...(presignRateLimit ? [presignRateLimit] : []),
