@@ -428,6 +428,7 @@
 
         // 2.10 — Max file size (100 MiB)
         const MAX_FILE_SIZE = 100 * 1024 * 1024;
+        const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'webm', 'flac']);
 
         // 2.12 — Named progress constants
         const PROGRESS = {
@@ -487,6 +488,14 @@
             }
         }
 
+        function isAudioFile(file) {
+            if (file.type) {
+                return file.type.startsWith('audio/');
+            }
+            const ext = file.name.split('.').pop().toLowerCase();
+            return AUDIO_EXTENSIONS.has(ext);
+        }
+
         // File upload handling
         uploadZone.addEventListener('click', () => fileInput.click());
 
@@ -525,7 +534,7 @@
         });
 
         async function handleFileSelect(file) {
-            if (!file.type.startsWith('audio/')) {
+            if (!isAudioFile(file)) {
                 showStatus('Please select an audio file', 'error');
                 return;
             }

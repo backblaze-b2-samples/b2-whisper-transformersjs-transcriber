@@ -347,7 +347,7 @@ export async function startServer() {
     presignAuthToken = getPresignAuthToken();
   } catch (error) {
     console.error(error.message);
-    console.error('Copy backend/.env.example to backend/.env and fill in your credentials.');
+    console.error('Copy .env.example to .env and fill in your credentials.');
     process.exit(1);
   }
 
