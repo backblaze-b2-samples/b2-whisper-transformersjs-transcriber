@@ -1,13 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createB2S3Client, getB2PublicUrl, getB2Settings } from '../b2-config.js';
+import {
+  B2_SAMPLE_USER_AGENT,
+  createB2S3Client,
+  getB2S3ClientOptions,
+  getB2PublicUrl,
+  getB2Settings,
+} from '../b2-config.js';
 
 const B2_ENV_KEYS = [
+  'B2_ENDPOINT',
   'B2_APPLICATION_KEY_ID',
   'B2_APPLICATION_KEY',
   'B2_BUCKET_NAME',
   'B2_REGION',
   'B2_PUBLIC_URL_BASE',
+  'B2_KEY_ID',
+  'B2_APP_KEY',
+  'B2_BUCKET',
 ];
 const SAMPLE_REGION = ['us', 'west', '002'].join('-');
 const SAMPLE_ENDPOINT = `https://s3.${SAMPLE_REGION}.backblazeb2.com`;
@@ -44,7 +54,8 @@ test('getB2Settings reads standardized env vars and derives the S3 endpoint', ()
     B2_REGION: SAMPLE_REGION,
     B2_PUBLIC_URL_BASE: 'https://cdn.example.com/files/',
   }, () => {
-    assert.deepEqual(getB2Settings(), {
+    const warnings = [];
+    assert.deepEqual(getB2Settings({ warn: (message) => warnings.push(message) }), {
       applicationKeyId: 'application-key-id',
       applicationKey: 'application-key',
       bucketName: 'sample-bucket',
@@ -52,6 +63,59 @@ test('getB2Settings reads standardized env vars and derives the S3 endpoint', ()
       publicUrlBase: 'https://cdn.example.com/files',
       region: SAMPLE_REGION,
     });
+    assert.deepEqual(warnings, []);
+  });
+});
+
+test('getB2Settings accepts deprecated legacy env aliases', () => {
+  withB2Env({
+    B2_ENDPOINT: SAMPLE_ENDPOINT,
+    B2_KEY_ID: 'legacy-key-id',
+    B2_APP_KEY: 'legacy-application-key',
+    B2_BUCKET: 'legacy-bucket',
+  }, () => {
+    const warnings = [];
+    assert.deepEqual(getB2Settings({ warn: (message) => warnings.push(message) }), {
+      applicationKeyId: 'legacy-key-id',
+      applicationKey: 'legacy-application-key',
+      bucketName: 'legacy-bucket',
+      endpoint: SAMPLE_ENDPOINT,
+      publicUrlBase: '',
+      region: SAMPLE_REGION,
+    });
+    assert.equal(warnings.length, 4);
+    assert.match(warnings.join('\n'), /B2_KEY_ID is deprecated/);
+    assert.match(warnings.join('\n'), /B2_APP_KEY is deprecated/);
+    assert.match(warnings.join('\n'), /B2_BUCKET is deprecated/);
+    assert.match(warnings.join('\n'), /B2_ENDPOINT is deprecated/);
+  });
+});
+
+test('getB2Settings gives standardized env vars precedence over aliases', () => {
+  withB2Env({
+    B2_ENDPOINT: 'https://legacy.example.com',
+    B2_APPLICATION_KEY_ID: 'application-key-id',
+    B2_APPLICATION_KEY: 'application-key',
+    B2_BUCKET_NAME: 'sample-bucket',
+    B2_REGION: SAMPLE_REGION,
+    B2_KEY_ID: 'legacy-key-id',
+    B2_APP_KEY: 'legacy-application-key',
+    B2_BUCKET: 'legacy-bucket',
+  }, () => {
+    const warnings = [];
+    assert.deepEqual(getB2Settings({ warn: (message) => warnings.push(message) }), {
+      applicationKeyId: 'application-key-id',
+      applicationKey: 'application-key',
+      bucketName: 'sample-bucket',
+      endpoint: SAMPLE_ENDPOINT,
+      publicUrlBase: '',
+      region: SAMPLE_REGION,
+    });
+    assert.equal(warnings.length, 4);
+    assert.match(warnings.join('\n'), /B2_KEY_ID is deprecated and ignored/);
+    assert.match(warnings.join('\n'), /B2_APP_KEY is deprecated and ignored/);
+    assert.match(warnings.join('\n'), /B2_BUCKET is deprecated and ignored/);
+    assert.match(warnings.join('\n'), /B2_ENDPOINT is deprecated/);
   });
 });
 
@@ -94,17 +158,19 @@ test('getB2PublicUrl returns encoded public URLs when configured', () => {
 });
 
 test('createB2S3Client sets the Backblaze sample custom user agent', () => {
-  const client = createB2S3Client({
+  assert.match(B2_SAMPLE_USER_AGENT, /\(backblaze-b2-samples\)/);
+
+  const settings = {
     applicationKeyId: 'application-key-id',
     applicationKey: 'application-key',
     bucketName: 'sample-bucket',
     endpoint: SAMPLE_ENDPOINT,
     publicUrlBase: '',
     region: SAMPLE_REGION,
-  });
+  };
+  const clientOptions = getB2S3ClientOptions(settings);
+  const client = createB2S3Client(settings);
 
-  assert.match(
-    JSON.stringify(client.config.customUserAgent),
-    /\(backblaze-b2-samples\)/
-  );
+  assert.equal(clientOptions.customUserAgent, B2_SAMPLE_USER_AGENT);
+  assert.equal(client.constructor.name, 'S3Client');
 });

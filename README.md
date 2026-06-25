@@ -80,6 +80,19 @@ B2_PUBLIC_URL_BASE=
 
 > Get your B2 region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples). The S3-compatible endpoint is derived from `B2_REGION`. Set `B2_PUBLIC_URL_BASE` only when your bucket is public or fronted by a CDN; otherwise the app returns pre-signed GET URLs.
 
+#### Migrating from legacy environment names
+
+For rolling deploys and rollback safety, the backend still accepts the legacy names for one release. Set the standardized names first; they take precedence when both are present.
+
+| Legacy name | Standard name |
+| --- | --- |
+| `B2_KEY_ID` | `B2_APPLICATION_KEY_ID` |
+| `B2_APP_KEY` | `B2_APPLICATION_KEY` |
+| `B2_BUCKET` | `B2_BUCKET_NAME` |
+| `B2_ENDPOINT` | Use `B2_REGION`; the S3-compatible endpoint is derived automatically |
+
+After all running processes use the standardized names, remove the legacy variables from deployment configuration.
+
 ### 3. Start the App
 
 ```bash
@@ -211,7 +224,8 @@ Request:
 ```json
 {
   "filename": "audio.mp3",
-  "contentType": "audio/mpeg"
+  "contentType": "audio/mpeg",
+  "size": 1234567
 }
 ```
 
@@ -221,7 +235,8 @@ Response:
   "uploadUrl": "https://...",
   "publicUrl": "https://...",
   "key": "audio/uuid.mp3",
-  "fileId": "uuid"
+  "fileId": "uuid",
+  "transcriptToken": "server-issued-token"
 }
 ```
 
@@ -230,7 +245,8 @@ Response:
 Request:
 ```json
 {
-  "fileId": "uuid"
+  "fileId": "uuid",
+  "transcriptToken": "server-issued-token"
 }
 ```
 

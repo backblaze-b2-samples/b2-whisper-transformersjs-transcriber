@@ -16,16 +16,20 @@ const corsRules = {
   ],
 };
 
-export async function setupCORS(silent = false) {
+export async function setupCORS(silent = false, settings = null) {
   let b2Settings;
-  try {
-    b2Settings = getB2Settings();
-  } catch (error) {
-    console.error('❌ Invalid B2 environment configuration!');
-    console.error(error.message);
-    console.error('Please set: B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME, B2_REGION');
-    console.error('Copy .env.example to .env and fill in your B2 credentials.');
-    process.exit(1);
+  if (settings) {
+    b2Settings = settings;
+  } else {
+    try {
+      b2Settings = getB2Settings();
+    } catch (error) {
+      console.error('❌ Invalid B2 environment configuration!');
+      console.error(error.message);
+      console.error('Please set: B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME, B2_REGION');
+      console.error('Copy .env.example to .env and fill in your B2 credentials.');
+      process.exit(1);
+    }
   }
 
   const s3Client = createB2S3Client(b2Settings);

@@ -372,6 +372,7 @@
         let selectedFile = null;
         let audioUrl = null;
         let fileId = null;
+        let transcriptToken = null;
         let whisperPipeline = null;
 
         const uploadZone = document.getElementById('uploadZone');
@@ -474,6 +475,8 @@
             }
 
             selectedFile = file;
+            transcriptToken = null;
+            transcribeBtn.disabled = true;
             showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
 
             // Upload to B2 immediately
@@ -491,7 +494,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         filename: selectedFile.name,
-                        contentType: selectedFile.type
+                        contentType: selectedFile.type,
+                        size: selectedFile.size
                     })
                 });
 
@@ -499,8 +503,9 @@
                     throw new Error('Failed to get pre-signed URL');
                 }
 
-                const { uploadUrl, publicUrl, fileId: id } = await response.json();
+                const { uploadUrl, publicUrl, fileId: id, transcriptToken: token } = await response.json();
                 fileId = id;
+                transcriptToken = token;
 
                 setProgress(PROGRESS.PRESIGN_DONE);
 
@@ -562,7 +567,7 @@
                 const presignResponse = await fetchWithTimeout(`${API_BASE}/api/presign-transcript`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fileId })
+                    body: JSON.stringify({ fileId, transcriptToken })
                 });
 
                 if (!presignResponse.ok) {

@@ -1,50 +1,143 @@
 import { S3Client } from '@aws-sdk/client-s3';
 
-const REQUIRED_ENV = [
-  'B2_APPLICATION_KEY_ID',
-  'B2_APPLICATION_KEY',
-  'B2_BUCKET_NAME',
-  'B2_REGION',
+export const B2_SAMPLE_USER_AGENT = 'b2-whisper-transformersjs-transcriber (backblaze-b2-samples)';
+
+const REQUIRED_SETTINGS = [
+  {
+    name: 'applicationKeyId',
+    envKey: 'B2_APPLICATION_KEY_ID',
+    legacyEnvKeys: ['B2_KEY_ID'],
+  },
+  {
+    name: 'applicationKey',
+    envKey: 'B2_APPLICATION_KEY',
+    legacyEnvKeys: ['B2_APP_KEY'],
+  },
+  {
+    name: 'bucketName',
+    envKey: 'B2_BUCKET_NAME',
+    legacyEnvKeys: ['B2_BUCKET'],
+  },
+  {
+    name: 'region',
+    envKey: 'B2_REGION',
+    legacyEnvKeys: [],
+  },
 ];
 
 const PLACEHOLDER_VALUES = new Set([
   'your_application_key_id',
   'your_application_key',
   'your_application_key_here',
+  'your_key_id_here',
+  'your_app_key_here',
   'your-bucket-name',
   'your_region',
 ]);
 
-function cleanValue(key) {
-  return (process.env[key] || '').trim();
+function cleanValue(key, env) {
+  return (env[key] || '').trim();
 }
 
-export function getB2Settings() {
-  const missing = REQUIRED_ENV.filter((key) => !cleanValue(key));
+function inferRegionFromEndpoint(endpoint) {
+  const match = endpoint.match(/^https?:\/\/s3[.-]([a-z]+-[a-z]+-\d+)\.backblazeb2\.com/i);
+  return match ? match[1] : '';
+}
+
+function emitDeprecation(warn, message) {
+  if (typeof warn === 'function') {
+    warn(message);
+  }
+}
+
+function readRequiredSetting(setting, env, warn) {
+  const primaryValue = cleanValue(setting.envKey, env);
+  const legacyValues = setting.legacyEnvKeys
+    .map((key) => ({ key, value: cleanValue(key, env) }))
+    .filter(({ value }) => value);
+
+  if (primaryValue) {
+    for (const { key } of legacyValues) {
+      emitDeprecation(
+        warn,
+        `${key} is deprecated and ignored because ${setting.envKey} is set. ` +
+          `Keep both during rollout, then remove ${key} after migration.`
+      );
+    }
+    return {
+      key: setting.envKey,
+      value: primaryValue,
+    };
+  }
+
+  if (legacyValues.length > 0) {
+    const { key, value } = legacyValues[0];
+    emitDeprecation(
+      warn,
+      `${key} is deprecated. Set ${setting.envKey}; ${setting.envKey} takes precedence when both are present.`
+    );
+    return { key, value };
+  }
+
+  return {
+    key: setting.envKey,
+    value: '',
+  };
+}
+
+export function getB2Settings({ env = process.env, warn = console.warn } = {}) {
+  const settings = {};
+  const usedKeys = {};
+
+  for (const setting of REQUIRED_SETTINGS) {
+    const { key, value } = readRequiredSetting(setting, env, warn);
+    settings[setting.name] = value;
+    usedKeys[setting.name] = key;
+  }
+
+  const legacyEndpoint = cleanValue('B2_ENDPOINT', env);
+  if (legacyEndpoint) {
+    emitDeprecation(
+      warn,
+      'B2_ENDPOINT is deprecated. Set B2_REGION and let the app derive the S3-compatible endpoint.'
+    );
+  }
+
+  if (!settings.region && legacyEndpoint) {
+    settings.region = inferRegionFromEndpoint(legacyEndpoint);
+    usedKeys.region = 'B2_ENDPOINT';
+  }
+
+  const missing = REQUIRED_SETTINGS
+    .filter((setting) => !settings[setting.name])
+    .map((setting) => setting.envKey);
   if (missing.length > 0) {
     throw new Error(`Missing required B2 environment variables: ${missing.join(', ')}`);
   }
 
-  const placeholders = REQUIRED_ENV.filter((key) => PLACEHOLDER_VALUES.has(cleanValue(key)));
+  const placeholders = REQUIRED_SETTINGS
+    .filter((setting) => PLACEHOLDER_VALUES.has(settings[setting.name]))
+    .map((setting) => usedKeys[setting.name] || setting.envKey);
   if (placeholders.length > 0) {
     throw new Error(`B2 environment variables still have placeholder values: ${placeholders.join(', ')}`);
   }
 
-  const region = cleanValue('B2_REGION');
-  const publicUrlBase = cleanValue('B2_PUBLIC_URL_BASE').replace(/\/+$/, '');
+  const publicUrlBase = cleanValue('B2_PUBLIC_URL_BASE', env).replace(/\/+$/, '');
 
   return {
-    applicationKeyId: cleanValue('B2_APPLICATION_KEY_ID'),
-    applicationKey: cleanValue('B2_APPLICATION_KEY'),
-    bucketName: cleanValue('B2_BUCKET_NAME'),
-    endpoint: `https://s3.${region}.backblazeb2.com`,
+    applicationKeyId: settings.applicationKeyId,
+    applicationKey: settings.applicationKey,
+    bucketName: settings.bucketName,
+    endpoint: legacyEndpoint && usedKeys.region === 'B2_ENDPOINT'
+      ? legacyEndpoint
+      : `https://s3.${settings.region}.backblazeb2.com`,
     publicUrlBase,
-    region,
+    region: settings.region,
   };
 }
 
-export function createB2S3Client(settings = getB2Settings()) {
-  return new S3Client({
+export function getB2S3ClientOptions(settings = getB2Settings()) {
+  return {
     endpoint: settings.endpoint,
     region: settings.region,
     credentials: {
@@ -52,8 +145,12 @@ export function createB2S3Client(settings = getB2Settings()) {
       secretAccessKey: settings.applicationKey,
     },
     forcePathStyle: true,
-    customUserAgent: 'b2-whisper-transformersjs-transcriber/1.0.0 (backblaze-b2-samples)',
-  });
+    customUserAgent: B2_SAMPLE_USER_AGENT,
+  };
+}
+
+export function createB2S3Client(settings = getB2Settings()) {
+  return new S3Client(getB2S3ClientOptions(settings));
 }
 
 export function getB2PublicUrl(key, settings = getB2Settings()) {
