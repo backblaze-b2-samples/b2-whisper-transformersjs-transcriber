@@ -334,6 +334,34 @@ test('transcript presign accepts the token issued with the audio presign', async
   });
 });
 
+test('presign endpoints rate limit unauthenticated requests before auth', async () => {
+  const { app, calls } = createTestApp({
+    presignRateLimit: createPresignRateLimit({
+      maxRequests: 1,
+      now: () => 1_000,
+      windowMs: 100,
+    }),
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const first = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, { authToken: null });
+    const second = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, { authToken: null });
+
+    assert.equal(first.status, 401);
+    assert.equal(second.status, 429);
+    assert.equal(second.body.error, 'Too many presign requests');
+    assert.equal(calls.length, 0);
+  });
+});
+
 test('presign endpoints apply rate limiting', async () => {
   let currentTime = 1_000;
   const { app } = createTestApp({

@@ -257,8 +257,8 @@ export function createApp({
   const presignObjectUrls = presignUrls || createPresignHelper(s3Client, b2Settings, urlExpiry);
   const tokenTtlMs = transcriptTokenTtlMs || urlExpiry * 1000;
   const presignMiddlewares = [
-    createPresignAuth({ allowedOrigins: trustedOrigins, authToken: presignAuthToken }),
     ...(presignRateLimit ? [presignRateLimit] : []),
+    createPresignAuth({ allowedOrigins: trustedOrigins, authToken: presignAuthToken }),
   ];
 
   app.use(cors({ origin: createCorsOrigin(trustedOrigins) }));
