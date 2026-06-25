@@ -428,7 +428,14 @@
 
         // 2.10 — Max file size (100 MiB)
         const MAX_FILE_SIZE = 100 * 1024 * 1024;
-        const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'webm', 'flac']);
+        const AUDIO_CONTENT_TYPES = new Map([
+            ['flac', 'audio/flac'],
+            ['m4a', 'audio/mp4'],
+            ['mp3', 'audio/mpeg'],
+            ['ogg', 'audio/ogg'],
+            ['wav', 'audio/wav'],
+            ['webm', 'audio/webm'],
+        ]);
 
         // 2.12 — Named progress constants
         const PROGRESS = {
@@ -488,12 +495,20 @@
             }
         }
 
-        function isAudioFile(file) {
-            if (file.type) {
-                return file.type.startsWith('audio/');
-            }
+        function getFileExtension(file) {
             const ext = file.name.split('.').pop().toLowerCase();
-            return AUDIO_EXTENSIONS.has(ext);
+            return ext === file.name.toLowerCase() ? '' : ext;
+        }
+
+        function isAudioFile(file) {
+            return (file.type || '').startsWith('audio/') || AUDIO_CONTENT_TYPES.has(getFileExtension(file));
+        }
+
+        function getAudioContentType(file) {
+            if ((file.type || '').startsWith('audio/')) {
+                return file.type;
+            }
+            return AUDIO_CONTENT_TYPES.get(getFileExtension(file)) || 'audio/webm';
         }
 
         // File upload handling
@@ -559,7 +574,7 @@
                 showStatus('Uploading audio to B2...', 'info');
                 setProgress(PROGRESS.UPLOAD_START);
 
-                const audioContentType = selectedFile.type || 'audio/webm';
+                const audioContentType = getAudioContentType(selectedFile);
 
                 // Get pre-signed URL for audio
                 const response = await fetchWithTimeout(`${API_BASE}/api/presign-audio`, {
