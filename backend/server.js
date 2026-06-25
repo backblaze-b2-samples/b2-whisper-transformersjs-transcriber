@@ -5,7 +5,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dotenv from 'dotenv';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { setupCORS } from './setup-cors.js';
 import { createB2S3Client, getB2PublicUrl, getB2Settings } from './b2-config.js';
 
@@ -84,17 +84,28 @@ export function verifyTranscriptToken(token, fileId, secret, now = Date.now()) {
 
 export function createPresignRateLimit({
   maxRequests = PRESIGN_RATE_LIMIT_MAX_REQUESTS,
+  now = Date.now,
   windowMs = PRESIGN_RATE_LIMIT_WINDOW_MS,
 } = {}) {
   const clients = new Map();
+  let nextCleanupAt = 0;
 
   return function presignRateLimit(req, res, next) {
     const key = req.ip || req.socket?.remoteAddress || 'unknown';
-    const now = Date.now();
-    const current = clients.get(key);
+    const currentTime = now();
 
-    if (!current || current.resetAt <= now) {
-      clients.set(key, { count: 1, resetAt: now + windowMs });
+    if (currentTime >= nextCleanupAt) {
+      for (const [clientKey, entry] of clients) {
+        if (entry.resetAt <= currentTime) {
+          clients.delete(clientKey);
+        }
+      }
+      nextCleanupAt = currentTime + windowMs;
+    }
+
+    const current = clients.get(key);
+    if (!current || current.resetAt <= currentTime) {
+      clients.set(key, { count: 1, resetAt: currentTime + windowMs });
       next();
       return;
     }
@@ -284,6 +295,7 @@ export async function startServer() {
   process.on('SIGINT', shutdown);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : '';
+if (import.meta.url === invokedPath) {
   startServer();
 }
