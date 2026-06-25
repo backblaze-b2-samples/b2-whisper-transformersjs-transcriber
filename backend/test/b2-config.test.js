@@ -93,7 +93,7 @@ test('getB2Settings accepts deprecated legacy env aliases', () => {
 
 test('getB2Settings gives standardized env vars precedence over aliases', () => {
   withB2Env({
-    B2_ENDPOINT: 'https://legacy.example.com',
+    B2_ENDPOINT: SAMPLE_ENDPOINT,
     B2_APPLICATION_KEY_ID: 'application-key-id',
     B2_APPLICATION_KEY: 'application-key',
     B2_BUCKET_NAME: 'sample-bucket',
@@ -116,6 +116,48 @@ test('getB2Settings gives standardized env vars precedence over aliases', () => 
     assert.match(warnings.join('\n'), /B2_APP_KEY is deprecated and ignored/);
     assert.match(warnings.join('\n'), /B2_BUCKET is deprecated and ignored/);
     assert.match(warnings.join('\n'), /B2_ENDPOINT is deprecated/);
+  });
+});
+
+test('getB2Settings rejects unsafe legacy B2 endpoints', () => {
+  const invalidEndpoints = [
+    `http://s3.${SAMPLE_REGION}.backblazeb2.com`,
+    `https://user@s3.${SAMPLE_REGION}.backblazeb2.com`,
+    `https://s3.${SAMPLE_REGION}.backblazeb2.com/path`,
+    `https://s3.${SAMPLE_REGION}.backblazeb2.com?token=value`,
+    `https://s3.${SAMPLE_REGION}.backblazeb2.com.evil.example`,
+    'https://evil.example',
+  ];
+
+  for (const endpoint of invalidEndpoints) {
+    withB2Env({
+      B2_ENDPOINT: endpoint,
+      B2_KEY_ID: 'legacy-key-id',
+      B2_APP_KEY: 'legacy-application-key',
+      B2_BUCKET: 'legacy-bucket',
+    }, () => {
+      assert.throws(
+        () => getB2Settings({ warn: () => {} }),
+        /Invalid B2_ENDPOINT/
+      );
+    });
+  }
+});
+
+test('getB2Settings rejects mismatched legacy endpoint and standard region', () => {
+  const otherRegion = ['eu', 'central', '003'].join('-');
+
+  withB2Env({
+    B2_ENDPOINT: SAMPLE_ENDPOINT,
+    B2_APPLICATION_KEY_ID: 'application-key-id',
+    B2_APPLICATION_KEY: 'application-key',
+    B2_BUCKET_NAME: 'sample-bucket',
+    B2_REGION: otherRegion,
+  }, () => {
+    assert.throws(
+      () => getB2Settings({ warn: () => {} }),
+      /B2_ENDPOINT region must match B2_REGION/
+    );
   });
 });
 

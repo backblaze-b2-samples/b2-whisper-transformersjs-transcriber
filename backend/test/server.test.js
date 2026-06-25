@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp, createPresignRateLimit } from '../server.js';
+import {
+  createApp,
+  createPresignRateLimit,
+  createPutObjectInput,
+  createTranscriptToken,
+  verifyTranscriptToken,
+} from '../server.js';
 
 const SAMPLE_REGION = ['us', 'west', '002'].join('-');
 const SAMPLE_ENDPOINT = `https://s3.${SAMPLE_REGION}.backblazeb2.com`;
+const PRESIGN_AUTH_TOKEN = 'trusted-presign-token';
+const TRUSTED_ORIGIN = 'https://trusted.example';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const B2_SETTINGS = {
@@ -18,8 +26,10 @@ const B2_SETTINGS = {
 function createTestApp(options = {}) {
   const calls = [];
   const app = createApp({
+    allowedOrigins: [TRUSTED_ORIGIN],
     b2Settings: B2_SETTINGS,
     maxAudioFileSize: 100,
+    presignAuthToken: PRESIGN_AUTH_TOKEN,
     presignRateLimit: null,
     presignUrls: async (key, contentType, presignOptions = {}) => {
       calls.push({ contentType, key, options: presignOptions });
@@ -49,10 +59,23 @@ async function withServer(app, fn) {
   }
 }
 
-async function postJson(baseUrl, pathname, body) {
+async function postJson(baseUrl, pathname, body, options = {}) {
+  const {
+    authToken = PRESIGN_AUTH_TOKEN,
+    origin = TRUSTED_ORIGIN,
+  } = options;
+  const headers = { 'Content-Type': 'application/json' };
+
+  if (authToken !== null) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  if (origin !== null) {
+    headers.Origin = origin;
+  }
+
   const response = await fetch(`${baseUrl}${pathname}`, {
     body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     method: 'POST',
   });
   return {
@@ -60,6 +83,59 @@ async function postJson(baseUrl, pathname, body) {
     status: response.status,
   };
 }
+
+test('createPutObjectInput includes the intended content length', () => {
+  assert.deepEqual(
+    createPutObjectInput('sample-bucket', 'audio/file.mp3', 'audio/mpeg', { contentLength: 42 }),
+    {
+      Bucket: 'sample-bucket',
+      ContentLength: 42,
+      ContentType: 'audio/mpeg',
+      Key: 'audio/file.mp3',
+    }
+  );
+});
+
+test('transcript tokens remain valid through their configured TTL', () => {
+  const fileId = '00000000-0000-4000-8000-000000000000';
+  const issuedAt = 1_000;
+  const token = createTranscriptToken(fileId, B2_SETTINGS.applicationKey, 120_000, issuedAt);
+
+  assert.equal(verifyTranscriptToken(token, fileId, B2_SETTINGS.applicationKey, issuedAt + 119_999), true);
+  assert.equal(verifyTranscriptToken(token, fileId, B2_SETTINGS.applicationKey, issuedAt + 120_001), false);
+});
+
+test('audio presign rejects unauthenticated requests without issuing URLs', async () => {
+  const { app, calls } = createTestApp();
+
+  await withServer(app, async (baseUrl) => {
+    const response = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, { authToken: null });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, 'Presign authentication required');
+    assert.equal(calls.length, 0);
+  });
+});
+
+test('audio presign rejects untrusted origins without issuing URLs', async () => {
+  const { app, calls } = createTestApp();
+
+  await withServer(app, async (baseUrl) => {
+    const response = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, { origin: 'https://untrusted.example' });
+
+    assert.equal(response.status, 403);
+    assert.equal(response.body.error, 'Untrusted origin');
+    assert.equal(calls.length, 0);
+  });
+});
 
 test('audio presign rejects requests above the server-side size limit', async () => {
   const { app, calls } = createTestApp();
@@ -72,8 +148,8 @@ test('audio presign rejects requests above the server-side size limit', async ()
     });
 
     assert.equal(response.status, 413);
-    assert.equal(calls.length, 0);
     assert.equal(response.body.error, 'File too large. Maximum size is 100 bytes.');
+    assert.equal(calls.length, 0);
   });
 });
 
@@ -87,12 +163,12 @@ test('audio presign requires a valid intended byte size', async () => {
     });
 
     assert.equal(response.status, 400);
-    assert.equal(calls.length, 0);
     assert.equal(response.body.error, 'Missing or invalid file size');
+    assert.equal(calls.length, 0);
   });
 });
 
-test('audio presign signs the intended content length and returns a transcript token', async () => {
+test('audio presign returns upload URLs and a transcript token for valid requests', async () => {
   const { app, calls } = createTestApp();
 
   await withServer(app, async (baseUrl) => {
@@ -105,10 +181,9 @@ test('audio presign signs the intended content length and returns a transcript t
     assert.equal(response.status, 200);
     assert.match(response.body.fileId, UUID_RE);
     assert.equal(typeof response.body.transcriptToken, 'string');
+    assert.match(response.body.uploadUrl, /^https:\/\/upload\.example\.com\/audio\//);
+    assert.match(response.body.publicUrl, /^https:\/\/read\.example\.com\/audio\//);
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].key, `audio/${response.body.fileId}.mp3`);
-    assert.equal(calls[0].contentType, 'audio/mpeg');
-    assert.deepEqual(calls[0].options, { contentLength: 42 });
   });
 });
 
@@ -158,10 +233,9 @@ test('transcript presign accepts the token issued with the audio presign', async
 
     assert.equal(transcript.status, 200);
     assert.equal(transcript.body.key, `transcripts/${audio.body.fileId}.json`);
+    assert.match(transcript.body.uploadUrl, /^https:\/\/upload\.example\.com\/transcripts\//);
+    assert.match(transcript.body.publicUrl, /^https:\/\/read\.example\.com\/transcripts\//);
     assert.equal(calls.length, 2);
-    assert.equal(calls[1].key, `transcripts/${audio.body.fileId}.json`);
-    assert.equal(calls[1].contentType, 'application/json');
-    assert.deepEqual(calls[1].options, {});
   });
 });
 

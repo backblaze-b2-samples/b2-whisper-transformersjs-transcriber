@@ -76,13 +76,16 @@ B2_APPLICATION_KEY=your_application_key
 B2_BUCKET_NAME=your-bucket-name
 B2_REGION=us-west-002
 B2_PUBLIC_URL_BASE=
+PRESIGN_AUTH_TOKEN=change_me_to_a_random_value
 ```
 
 > Get your B2 region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples). The S3-compatible endpoint is derived from `B2_REGION`. Set `B2_PUBLIC_URL_BASE` only when your bucket is public or fronted by a CDN; otherwise the app returns pre-signed GET URLs.
 
+Set `PRESIGN_AUTH_TOKEN` to a private random value and enter the same value in the app before uploading. For hosted frontends, set `CORS_ORIGIN` to the trusted frontend origin. Multiple origins can be comma-separated.
+
 #### Migrating from legacy environment names
 
-For rolling deploys and rollback safety, the backend still accepts the legacy names for one release. Set the standardized names first; they take precedence when both are present.
+For rolling deploys and rollback safety, the backend still accepts the legacy names during a compatibility window. During transition, configure both the legacy and standardized names in the runtime environment, deploy this version, then remove the legacy names after all running processes have been updated. Standardized names take precedence when both are present.
 
 | Legacy name | Standard name |
 | --- | --- |
@@ -91,7 +94,7 @@ For rolling deploys and rollback safety, the backend still accepts the legacy na
 | `B2_BUCKET` | `B2_BUCKET_NAME` |
 | `B2_ENDPOINT` | Use `B2_REGION`; the S3-compatible endpoint is derived automatically |
 
-After all running processes use the standardized names, remove the legacy variables from deployment configuration.
+Legacy aliases are planned for removal in `v2.0.0`, no earlier than September 30, 2026.
 
 ### 3. Start the App
 
@@ -220,6 +223,8 @@ Or use B2 Web UI → App Keys → Create Key
 
 ### POST /api/presign-audio
 
+Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and a trusted `Origin` when sent from a browser.
+
 Request:
 ```json
 {
@@ -242,6 +247,8 @@ Response:
 
 ### POST /api/presign-transcript
 
+Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and the `transcriptToken` returned by `/api/presign-audio`. The transcript token expires with `URL_EXPIRY`; increase `URL_EXPIRY` for long or delayed transcriptions.
+
 Request:
 ```json
 {
@@ -249,6 +256,8 @@ Request:
   "transcriptToken": "server-issued-token"
 }
 ```
+
+The presign endpoints reject files over 100 MB before issuing upload URLs and rate limit presign requests to 60 requests per minute per client IP.
 
 Response:
 ```json

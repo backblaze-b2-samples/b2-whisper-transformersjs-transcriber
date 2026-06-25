@@ -39,9 +39,25 @@ function cleanValue(key, env) {
   return (env[key] || '').trim();
 }
 
-function inferRegionFromEndpoint(endpoint) {
-  const match = endpoint.match(/^https?:\/\/s3[.-]([a-z]+-[a-z]+-\d+)\.backblazeb2\.com/i);
-  return match ? match[1] : '';
+function parseLegacyEndpointRegion(endpoint) {
+  try {
+    const url = new URL(endpoint);
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      return '';
+    }
+
+    const match = url.hostname.toLowerCase().match(/^s3[.-]([a-z]+-[a-z]+-\d+)\.backblazeb2\.com$/);
+    return match ? match[1] : '';
+  } catch {
+    return '';
+  }
 }
 
 function emitDeprecation(warn, message) {
@@ -96,15 +112,23 @@ export function getB2Settings({ env = process.env, warn = console.warn } = {}) {
   }
 
   const legacyEndpoint = cleanValue('B2_ENDPOINT', env);
+  let legacyEndpointRegion = '';
   if (legacyEndpoint) {
     emitDeprecation(
       warn,
       'B2_ENDPOINT is deprecated. Set B2_REGION and let the app derive the S3-compatible endpoint.'
     );
+
+    legacyEndpointRegion = parseLegacyEndpointRegion(legacyEndpoint);
+    if (!legacyEndpointRegion) {
+      throw new Error(
+        'Invalid B2_ENDPOINT. Use https://s3.<region>.backblazeb2.com without credentials, paths, query strings, or fragments.'
+      );
+    }
   }
 
-  if (!settings.region && legacyEndpoint) {
-    settings.region = inferRegionFromEndpoint(legacyEndpoint);
+  if (!settings.region && legacyEndpointRegion) {
+    settings.region = legacyEndpointRegion;
     usedKeys.region = 'B2_ENDPOINT';
   }
 
@@ -121,6 +145,9 @@ export function getB2Settings({ env = process.env, warn = console.warn } = {}) {
   if (placeholders.length > 0) {
     throw new Error(`B2 environment variables still have placeholder values: ${placeholders.join(', ')}`);
   }
+  if (legacyEndpointRegion && legacyEndpointRegion !== settings.region) {
+    throw new Error('B2_ENDPOINT region must match B2_REGION while both are configured.');
+  }
 
   const publicUrlBase = cleanValue('B2_PUBLIC_URL_BASE', env).replace(/\/+$/, '');
 
@@ -128,9 +155,7 @@ export function getB2Settings({ env = process.env, warn = console.warn } = {}) {
     applicationKeyId: settings.applicationKeyId,
     applicationKey: settings.applicationKey,
     bucketName: settings.bucketName,
-    endpoint: legacyEndpoint && usedKeys.region === 'B2_ENDPOINT'
-      ? legacyEndpoint
-      : `https://s3.${settings.region}.backblazeb2.com`,
+    endpoint: `https://s3.${settings.region}.backblazeb2.com`,
     publicUrlBase,
     region: settings.region,
   };

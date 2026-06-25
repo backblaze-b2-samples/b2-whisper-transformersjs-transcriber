@@ -19,6 +19,11 @@ export const MAX_AUDIO_FILE_SIZE = 100 * 1024 * 1024;
 const DEFAULT_URL_EXPIRY = 3600;
 const PRESIGN_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const PRESIGN_RATE_LIMIT_MAX_REQUESTS = 60;
+const PRESIGN_AUTH_PLACEHOLDERS = new Set([
+  'change_me_to_a_random_value',
+  'change-me',
+  'your-presign-token',
+]);
 
 const ALLOWED_AUDIO_EXT = new Set(['mp3', 'wav', 'ogg', 'm4a', 'webm', 'flac']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +35,32 @@ function parseUrlExpiry(env = process.env) {
 
 function shouldAutoSetupCors(env = process.env) {
   return !['false', '0', 'no'].includes((env.AUTO_SETUP_CORS || '').toLowerCase());
+}
+
+function getPresignAuthToken(env = process.env) {
+  const token = (env.PRESIGN_AUTH_TOKEN || '').trim();
+  if (!token || PRESIGN_AUTH_PLACEHOLDERS.has(token)) {
+    throw new Error('Missing required PRESIGN_AUTH_TOKEN. Set it to a private random value shared only with trusted clients.');
+  }
+  return token;
+}
+
+function getAllowedOrigins(env = process.env) {
+  return (env.CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function createCorsOrigin(allowedOrigins) {
+  return function corsOrigin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, allowedOrigins.includes(origin) ? origin : false);
+  };
 }
 
 function parseContentLength(size) {
@@ -120,23 +151,56 @@ export function createPresignRateLimit({
   };
 }
 
+function originMatchesRequestHost(req, origin) {
+  try {
+    const parsedOrigin = new URL(origin);
+    return parsedOrigin.host === req.get('host') && parsedOrigin.protocol === `${req.protocol}:`;
+  } catch {
+    return false;
+  }
+}
+
+function createPresignAuth({ allowedOrigins = [], authToken }) {
+  return function presignAuth(req, res, next) {
+    const origin = req.get('origin');
+    if (origin && !allowedOrigins.includes(origin) && !originMatchesRequestHost(req, origin)) {
+      res.status(403).json({ error: 'Untrusted origin' });
+      return;
+    }
+
+    const auth = req.get('authorization') || '';
+    const match = auth.match(/^Bearer\s+(.+)$/i);
+    const suppliedToken = match ? match[1] : req.get('x-presign-auth-token');
+    if (suppliedToken !== authToken) {
+      res.status(401).json({ error: 'Presign authentication required' });
+      return;
+    }
+
+    next();
+  };
+}
+
+export function createPutObjectInput(bucket, key, contentType, options = {}) {
+  const putObject = {
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+  };
+
+  if (options.contentLength !== undefined) {
+    putObject.ContentLength = options.contentLength;
+  }
+
+  return putObject;
+}
+
 function createPresignHelper(s3Client, b2Settings, urlExpiry) {
   const bucket = b2Settings.bucketName;
 
   return async function generatePresignedUrls(key, contentType, options = {}) {
-    const putObject = {
-      Bucket: bucket,
-      Key: key,
-      ContentType: contentType,
-    };
-
-    if (options.contentLength !== undefined) {
-      putObject.ContentLength = options.contentLength;
-    }
-
     const putUrl = await getSignedUrl(
       s3Client,
-      new PutObjectCommand(putObject),
+      new PutObjectCommand(createPutObjectInput(bucket, key, contentType, options)),
       { expiresIn: urlExpiry }
     );
     const publicUrl = getB2PublicUrl(key, b2Settings) || await getSignedUrl(
@@ -149,8 +213,10 @@ function createPresignHelper(s3Client, b2Settings, urlExpiry) {
 }
 
 export function createApp({
+  allowedOrigins = getAllowedOrigins(),
   b2Settings = getB2Settings(),
   maxAudioFileSize = MAX_AUDIO_FILE_SIZE,
+  presignAuthToken = getPresignAuthToken(),
   presignRateLimit = createPresignRateLimit(),
   presignUrls,
   s3Client = createB2S3Client(b2Settings),
@@ -161,9 +227,12 @@ export function createApp({
   const bucket = b2Settings.bucketName;
   const presignObjectUrls = presignUrls || createPresignHelper(s3Client, b2Settings, urlExpiry);
   const tokenTtlMs = transcriptTokenTtlMs || urlExpiry * 1000;
-  const presignMiddlewares = presignRateLimit ? [presignRateLimit] : [];
+  const presignMiddlewares = [
+    createPresignAuth({ allowedOrigins, authToken: presignAuthToken }),
+    ...(presignRateLimit ? [presignRateLimit] : []),
+  ];
 
-  app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
+  app.use(cors({ origin: createCorsOrigin(allowedOrigins) }));
   app.use(express.json({ limit: '1kb' }));
   app.use(express.static(path.join(__dirname, '../frontend')));
 
@@ -243,8 +312,10 @@ export function createApp({
 
 export async function startServer() {
   let b2Settings;
+  let presignAuthToken;
   try {
     b2Settings = getB2Settings();
+    presignAuthToken = getPresignAuthToken();
   } catch (error) {
     console.error(error.message);
     console.error('Copy backend/.env.example to backend/.env and fill in your credentials.');
@@ -280,7 +351,7 @@ export async function startServer() {
   }
 
   const port = process.env.PORT || 3000;
-  const app = createApp({ b2Settings, s3Client });
+  const app = createApp({ b2Settings, presignAuthToken, s3Client });
   const server = app.listen(port, () => {
     console.log(`\nServer running on http://localhost:${port}\n`);
   });
