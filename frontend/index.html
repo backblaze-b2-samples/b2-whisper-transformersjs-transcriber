@@ -426,7 +426,7 @@
             sessionStorage.setItem(PRESIGN_AUTH_STORAGE_KEY, authTokenInput.value.trim());
         });
 
-        // 2.10 — Max file size (100 MB)
+        // 2.10 — Max file size (100 MiB)
         const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
         // 2.12 — Named progress constants
@@ -523,14 +523,14 @@
 
             // 2.10 — File size validation
             if (file.size > MAX_FILE_SIZE) {
-                showStatus('File too large. Maximum size is 100 MB.', 'error');
+                showStatus('File too large. Maximum size is 100 MiB.', 'error');
                 return;
             }
 
             selectedFile = file;
             transcriptToken = null;
             transcribeBtn.disabled = true;
-            showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+            showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MiB)`, 'success');
 
             // Upload to B2 immediately
             await uploadToB2();
@@ -541,13 +541,15 @@
                 showStatus('Uploading audio to B2...', 'info');
                 setProgress(PROGRESS.UPLOAD_START);
 
+                const audioContentType = selectedFile.type || 'audio/webm';
+
                 // Get pre-signed URL for audio
                 const response = await fetchWithTimeout(`${API_BASE}/api/presign-audio`, {
                     method: 'POST',
                     headers: getPresignHeaders(),
                     body: JSON.stringify({
                         filename: selectedFile.name,
-                        contentType: selectedFile.type,
+                        contentType: audioContentType,
                         size: selectedFile.size
                     })
                 });
@@ -565,7 +567,7 @@
                 // Upload audio to B2 (120s timeout for large files)
                 const uploadResponse = await fetchWithTimeout(uploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': selectedFile.type },
+                    headers: { 'Content-Type': audioContentType },
                     body: selectedFile
                 }, 120000);
 

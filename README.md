@@ -257,7 +257,7 @@ Request:
 }
 ```
 
-The presign endpoints reject files over 100 MB before issuing upload URLs and rate limit presign requests to 60 requests per minute per client IP.
+The presign endpoints reject files over 100 MiB before issuing upload URLs and rate limit presign requests to 60 requests per minute per client IP.
 
 Response:
 ```json
