@@ -62,6 +62,7 @@ async function withServer(app, fn) {
 async function postJson(baseUrl, pathname, body, options = {}) {
   const {
     authToken = PRESIGN_AUTH_TOKEN,
+    headers: extraHeaders = {},
     origin = TRUSTED_ORIGIN,
   } = options;
   const headers = { 'Content-Type': 'application/json' };
@@ -72,6 +73,7 @@ async function postJson(baseUrl, pathname, body, options = {}) {
   if (origin !== null) {
     headers.Origin = origin;
   }
+  Object.assign(headers, extraHeaders);
 
   const response = await fetch(`${baseUrl}${pathname}`, {
     body: JSON.stringify(body),
@@ -154,6 +156,28 @@ test('audio presign rejects untrusted origins without issuing URLs', async () =>
   });
 });
 
+test('audio presign accepts forwarded same-origin HTTPS when trust proxy is enabled', async () => {
+  const { app, calls } = createTestApp({
+    allowedOrigins: [],
+    trustProxy: true,
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const { host } = new URL(baseUrl);
+    const response = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, {
+      headers: { 'X-Forwarded-Proto': 'https' },
+      origin: `https://${host}`,
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(calls.length, 1);
+  });
+});
+
 test('audio presign accepts origins normalized from CORS_ORIGIN URLs', async () => {
   const previousCorsOrigin = process.env.CORS_ORIGIN;
   process.env.CORS_ORIGIN = `${TRUSTED_ORIGIN}/upload`;
@@ -178,6 +202,34 @@ test('audio presign accepts origins normalized from CORS_ORIGIN URLs', async () 
       process.env.CORS_ORIGIN = previousCorsOrigin;
     }
   }
+});
+
+test('presign rate limit uses forwarded IPs when trust proxy is enabled', async () => {
+  const currentTime = 1_000;
+  const { app } = createTestApp({
+    presignRateLimit: createPresignRateLimit({
+      maxRequests: 1,
+      now: () => currentTime,
+      windowMs: 100,
+    }),
+    trustProxy: true,
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const first = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, { headers: { 'X-Forwarded-For': '203.0.113.10' } });
+    const second = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, { headers: { 'X-Forwarded-For': '203.0.113.11' } });
+
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+  });
 });
 
 test('audio presign rejects requests above the server-side size limit', async () => {

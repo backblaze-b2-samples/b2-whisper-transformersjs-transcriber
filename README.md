@@ -81,7 +81,7 @@ PRESIGN_AUTH_TOKEN=change_me_to_a_random_value
 
 > Get your B2 region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples). The S3-compatible endpoint is derived from `B2_REGION`. Set `B2_PUBLIC_URL_BASE` only when your bucket is public or fronted by a CDN; otherwise the app returns pre-signed GET URLs.
 
-Set `PRESIGN_AUTH_TOKEN` to a private random value and enter the same value in the app before uploading. For hosted frontends, set `CORS_ORIGIN` to the trusted frontend origin. Multiple origins can be comma-separated.
+Set `PRESIGN_AUTH_TOKEN` to a private random value and enter the same value in the app before uploading. For hosted frontends, set `CORS_ORIGIN` to the trusted frontend origin. Multiple origins can be comma-separated. If deploying behind a reverse proxy or TLS terminator, set `TRUST_PROXY=true` so same-origin checks and rate limiting use the forwarded protocol and client IP.
 
 #### Migrating from legacy environment names
 

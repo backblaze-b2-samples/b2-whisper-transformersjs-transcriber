@@ -37,6 +37,10 @@ function shouldAutoSetupCors(env = process.env) {
   return !['false', '0', 'no'].includes((env.AUTO_SETUP_CORS || '').toLowerCase());
 }
 
+function shouldTrustProxy(env = process.env) {
+  return ['true', '1', 'yes'].includes((env.TRUST_PROXY || '').toLowerCase());
+}
+
 function getPresignAuthToken(env = process.env) {
   const token = (env.PRESIGN_AUTH_TOKEN || '').trim();
   if (!token || PRESIGN_AUTH_PLACEHOLDERS.has(token)) {
@@ -242,9 +246,12 @@ export function createApp({
   presignUrls,
   s3Client = createB2S3Client(b2Settings),
   transcriptTokenTtlMs,
+  trustProxy = shouldTrustProxy(),
   urlExpiry = parseUrlExpiry(),
 } = {}) {
   const app = express();
+  app.set('trust proxy', trustProxy);
+
   const bucket = b2Settings.bucketName;
   const trustedOrigins = normalizeAllowedOrigins(allowedOrigins);
   const presignObjectUrls = presignUrls || createPresignHelper(s3Client, b2Settings, urlExpiry);
