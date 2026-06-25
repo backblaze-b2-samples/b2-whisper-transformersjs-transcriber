@@ -45,11 +45,22 @@ function getPresignAuthToken(env = process.env) {
   return token;
 }
 
-function getAllowedOrigins(env = process.env) {
-  return (env.CORS_ORIGIN || '')
-    .split(',')
-    .map((origin) => origin.trim())
+function normalizeOrigin(origin) {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return '';
+  }
+}
+
+function normalizeAllowedOrigins(origins) {
+  return origins
+    .map((origin) => normalizeOrigin(origin.trim()))
     .filter(Boolean);
+}
+
+function getAllowedOrigins(env = process.env) {
+  return normalizeAllowedOrigins((env.CORS_ORIGIN || '').split(','));
 }
 
 function createCorsOrigin(allowedOrigins) {
@@ -235,14 +246,15 @@ export function createApp({
 } = {}) {
   const app = express();
   const bucket = b2Settings.bucketName;
+  const trustedOrigins = normalizeAllowedOrigins(allowedOrigins);
   const presignObjectUrls = presignUrls || createPresignHelper(s3Client, b2Settings, urlExpiry);
   const tokenTtlMs = transcriptTokenTtlMs || urlExpiry * 1000;
   const presignMiddlewares = [
-    createPresignAuth({ allowedOrigins, authToken: presignAuthToken }),
+    createPresignAuth({ allowedOrigins: trustedOrigins, authToken: presignAuthToken }),
     ...(presignRateLimit ? [presignRateLimit] : []),
   ];
 
-  app.use(cors({ origin: createCorsOrigin(allowedOrigins) }));
+  app.use(cors({ origin: createCorsOrigin(trustedOrigins) }));
   app.use(express.json({ limit: '1kb' }));
   app.use(express.static(path.join(__dirname, '../frontend')));
 

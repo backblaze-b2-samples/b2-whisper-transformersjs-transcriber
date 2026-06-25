@@ -154,6 +154,32 @@ test('audio presign rejects untrusted origins without issuing URLs', async () =>
   });
 });
 
+test('audio presign accepts origins normalized from CORS_ORIGIN URLs', async () => {
+  const previousCorsOrigin = process.env.CORS_ORIGIN;
+  process.env.CORS_ORIGIN = `${TRUSTED_ORIGIN}/upload`;
+
+  try {
+    const { app, calls } = createTestApp({ allowedOrigins: undefined });
+
+    await withServer(app, async (baseUrl) => {
+      const response = await postJson(baseUrl, '/api/presign-audio', {
+        contentType: 'audio/mpeg',
+        filename: 'clip.mp3',
+        size: 42,
+      });
+
+      assert.equal(response.status, 200);
+      assert.equal(calls.length, 1);
+    });
+  } finally {
+    if (previousCorsOrigin === undefined) {
+      delete process.env.CORS_ORIGIN;
+    } else {
+      process.env.CORS_ORIGIN = previousCorsOrigin;
+    }
+  }
+});
+
 test('audio presign rejects requests above the server-side size limit', async () => {
   const { app, calls } = createTestApp();
 
