@@ -117,7 +117,7 @@ export function verifyTranscriptToken(token, fileId, secret, now = Date.now()) {
 
   try {
     const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    return claims.fileId === fileId && Number.isSafeInteger(claims.exp) && claims.exp >= now;
+    return claims.fileId === fileId && Number.isSafeInteger(claims.exp) && claims.exp > now;
   } catch {
     return false;
   }

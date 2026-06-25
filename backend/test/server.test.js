@@ -102,6 +102,7 @@ test('transcript tokens remain valid through their configured TTL', () => {
   const token = createTranscriptToken(fileId, B2_SETTINGS.applicationKey, 120_000, issuedAt);
 
   assert.equal(verifyTranscriptToken(token, fileId, B2_SETTINGS.applicationKey, issuedAt + 119_999), true);
+  assert.equal(verifyTranscriptToken(token, fileId, B2_SETTINGS.applicationKey, issuedAt + 120_000), false);
   assert.equal(verifyTranscriptToken(token, fileId, B2_SETTINGS.applicationKey, issuedAt + 120_001), false);
 });
 
