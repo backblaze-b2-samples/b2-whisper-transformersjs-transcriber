@@ -478,6 +478,15 @@
             };
         }
 
+        async function getJsonError(response, fallback) {
+            try {
+                const body = await response.json();
+                return body && typeof body.error === 'string' ? body.error : fallback;
+            } catch {
+                return fallback;
+            }
+        }
+
         // File upload handling
         uploadZone.addEventListener('click', () => fileInput.click());
 
@@ -555,7 +564,7 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('Failed to get pre-signed URL');
+                    throw new Error(await getJsonError(response, 'Failed to get pre-signed URL'));
                 }
 
                 const { uploadUrl, publicUrl, fileId: id, transcriptToken: token } = await response.json();
@@ -626,7 +635,7 @@
                 });
 
                 if (!presignResponse.ok) {
-                    throw new Error('Failed to get transcript pre-signed URL');
+                    throw new Error(await getJsonError(presignResponse, 'Failed to get transcript pre-signed URL'));
                 }
 
                 const { uploadUrl: transcriptUploadUrl, publicUrl: transcriptPublicUrl } = await presignResponse.json();
