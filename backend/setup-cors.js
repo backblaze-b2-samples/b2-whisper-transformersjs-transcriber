@@ -142,5 +142,8 @@ export async function setupCORS(silent = false, settings = null) {
 // Run if called directly
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : '';
 if (import.meta.url === invokedPath) {
-  setupCORS();
+  setupCORS().catch((error) => {
+    console.error('❌ Failed to set up CORS:', error.message || error);
+    process.exit(1);
+  });
 }
