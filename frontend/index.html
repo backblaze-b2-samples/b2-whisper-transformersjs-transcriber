@@ -351,7 +351,7 @@
                     <a id="transcriptLink" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center;">View Transcript JSON</a>
                 </div>
                 <p class="links-hint">
-                    Click links above to access your files (pre-signed URLs valid for 1 hour)
+                    Click links above to access your files from B2
                 </p>
             </div>
         </div>
@@ -507,7 +507,7 @@
                 // Upload audio to B2 (120s timeout for large files)
                 const uploadResponse = await fetchWithTimeout(uploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': selectedFile.type, 'User-Agent': "b2ai-transformersjs" },
+                    headers: { 'Content-Type': selectedFile.type },
                     body: selectedFile
                 }, 120000);
 
@@ -582,7 +582,7 @@
                 // 2.11 — Compact JSON (no pretty-print for upload)
                 const transcriptUploadResponse = await fetchWithTimeout(transcriptUploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'User-Agent': "b2ai-transformersjs" },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(transcriptData)
                 }, 120000);
 

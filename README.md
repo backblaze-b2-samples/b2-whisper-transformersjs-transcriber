@@ -71,14 +71,14 @@ cp .env.example .env
 Edit `.env` with your [B2 credentials](https://www.backblaze.com/docs/cloud-storage-enable-backblaze-b2?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples):
 
 ```env
-B2_ENDPOINT=https://s3.us-west-002.backblazeb2.com
+B2_APPLICATION_KEY_ID=your_application_key_id
+B2_APPLICATION_KEY=your_application_key
+B2_BUCKET_NAME=your-bucket-name
 B2_REGION=us-west-002
-B2_KEY_ID=your_key_id_here
-B2_APP_KEY=your_app_key_here
-B2_BUCKET=your-bucket-name
+B2_PUBLIC_URL_BASE=
 ```
 
-> Get your B2 endpoint and region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)
+> Get your B2 region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples). The S3-compatible endpoint is derived from `B2_REGION`. Set `B2_PUBLIC_URL_BASE` only when your bucket is public or fronted by a CDN; otherwise the app returns pre-signed GET URLs.
 
 ### 3. Start the App
 
@@ -344,7 +344,7 @@ Requires WebAssembly and ES6 modules support.
 
 **Solution**:
 1. Check bucket is public or URLs are pre-signed
-2. Verify endpoint URL matches bucket region
+2. Verify `B2_REGION` matches the bucket region
 3. Try accessing URL directly in browser
 4. Check B2 bucket lifecycle rules aren't deleting files
 

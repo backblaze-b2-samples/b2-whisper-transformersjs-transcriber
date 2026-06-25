@@ -1,21 +1,23 @@
 #!/usr/bin/env node
 
-import { S3Client, PutBucketCorsCommand, GetBucketCorsCommand } from '@aws-sdk/client-s3';
+import { PutBucketCorsCommand, GetBucketCorsCommand } from '@aws-sdk/client-s3';
 import dotenv from 'dotenv';
+import { createB2S3Client, getB2Settings } from './b2-config.js';
 
 dotenv.config();
 
-const s3Client = new S3Client({
-  endpoint: process.env.B2_ENDPOINT,
-  region: process.env.B2_REGION || 'us-west-002',
-  credentials: {
-    accessKeyId: process.env.B2_KEY_ID,
-    secretAccessKey: process.env.B2_APP_KEY,
-  },
-  forcePathStyle: true,
-});
+let b2Settings;
+try {
+  b2Settings = getB2Settings();
+} catch (error) {
+  console.error('❌ Invalid B2 environment configuration!');
+  console.error(error.message);
+  console.error('Please set: B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME, B2_REGION');
+  process.exit(1);
+}
 
-const BUCKET = process.env.B2_BUCKET;
+const s3Client = createB2S3Client(b2Settings);
+const BUCKET = b2Settings.bucketName;
 
 // CORS rules for S3 Compatible API with PUT support
 const corsRules = {
