@@ -509,7 +509,9 @@
 
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
-                handleFileSelect(e.target.files[0]);
+                const file = e.target.files[0];
+                fileInput.value = '';
+                handleFileSelect(file);
             }
         });
 

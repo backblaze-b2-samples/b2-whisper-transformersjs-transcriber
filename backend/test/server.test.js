@@ -121,6 +121,22 @@ test('audio presign rejects unauthenticated requests without issuing URLs', asyn
   });
 });
 
+test('audio presign rejects wrong bearer tokens without issuing URLs', async () => {
+  const { app, calls } = createTestApp();
+
+  await withServer(app, async (baseUrl) => {
+    const response = await postJson(baseUrl, '/api/presign-audio', {
+      contentType: 'audio/mpeg',
+      filename: 'clip.mp3',
+      size: 42,
+    }, { authToken: 'wrong-token' });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error, 'Presign authentication required');
+    assert.equal(calls.length, 0);
+  });
+});
+
 test('audio presign rejects untrusted origins without issuing URLs', async () => {
   const { app, calls } = createTestApp();
 

@@ -81,6 +81,16 @@ function signaturesMatch(expectedSignature, actualSignature) {
   }
 }
 
+function stringsMatch(expectedValue, actualValue) {
+  if (typeof expectedValue !== 'string' || typeof actualValue !== 'string') {
+    return false;
+  }
+
+  const expected = Buffer.from(expectedValue);
+  const actual = Buffer.from(actualValue);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
 export function createTranscriptToken(fileId, secret, ttlMs, now = Date.now()) {
   const payload = Buffer.from(JSON.stringify({
     exp: now + ttlMs,
@@ -171,7 +181,7 @@ function createPresignAuth({ allowedOrigins = [], authToken }) {
     const auth = req.get('authorization') || '';
     const match = auth.match(/^Bearer\s+(.+)$/i);
     const suppliedToken = match ? match[1] : req.get('x-presign-auth-token');
-    if (suppliedToken !== authToken) {
+    if (!stringsMatch(authToken, suppliedToken)) {
       res.status(401).json({ error: 'Presign authentication required' });
       return;
     }
