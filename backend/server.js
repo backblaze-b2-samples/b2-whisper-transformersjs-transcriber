@@ -1,146 +1,364 @@
 import express from 'express';
 import cors from 'cors';
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand, GetObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dotenv from 'dotenv';
-import { randomUUID } from 'crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { setupCORS } from './setup-cors.js';
+import { createB2S3Client, getB2PublicUrl, getB2Settings } from './b2-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-// 1.1 — Validate required env vars at startup
-const REQUIRED_ENV = ['B2_ENDPOINT', 'B2_KEY_ID', 'B2_APP_KEY', 'B2_BUCKET'];
-const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
-if (missing.length > 0) {
-  console.error(`Missing required environment variables: ${missing.join(', ')}`);
-  console.error('Copy backend/.env.example to backend/.env and fill in your credentials.');
-  process.exit(1);
-}
+export const MAX_AUDIO_FILE_SIZE = 100 * 1024 * 1024;
 
-const app = express();
+const DEFAULT_URL_EXPIRY = 3600;
+const PRESIGN_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const PRESIGN_RATE_LIMIT_MAX_REQUESTS = 60;
+const PRESIGN_AUTH_PLACEHOLDERS = new Set([
+  'change_me_to_a_random_value',
+  'change-me',
+  'your-presign-token',
+]);
 
-// 1.5 — Configurable CORS origin
-app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
-
-// 1.4 — Limit request body size (presign payloads are tiny)
-app.use(express.json({ limit: '1kb' }));
-
-// Serve frontend files
-app.use(express.static(path.join(__dirname, '../frontend')));
-
-const s3Client = new S3Client({
-  endpoint: process.env.B2_ENDPOINT,
-  region: process.env.B2_REGION || 'us-west-002',
-  credentials: {
-    accessKeyId: process.env.B2_KEY_ID,
-    secretAccessKey: process.env.B2_APP_KEY,
-  },
-  forcePathStyle: true,
-  customUserAgent: "b2ai-transformersjs",
-});
-
-const BUCKET = process.env.B2_BUCKET;
-
-// 2.2 — Configurable URL expiry
-const URL_EXPIRY = parseInt(process.env.URL_EXPIRY, 10) || 3600;
-
-// 2.5 — Robust boolean parsing for AUTO_SETUP_CORS
-const AUTO_SETUP_CORS = !['false', '0', 'no'].includes(
-  (process.env.AUTO_SETUP_CORS || '').toLowerCase()
-);
-
-// 1.2 — Allowed audio extensions
 const ALLOWED_AUDIO_EXT = new Set(['mp3', 'wav', 'ogg', 'm4a', 'webm', 'flac']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// 2.1 — Shared presign helper
-async function generatePresignedUrls(key, contentType) {
-  const putUrl = await getSignedUrl(
-    s3Client,
-    new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType }),
-    { expiresIn: URL_EXPIRY }
-  );
-  const getUrl = await getSignedUrl(
-    s3Client,
-    new GetObjectCommand({ Bucket: BUCKET, Key: key }),
-    { expiresIn: URL_EXPIRY }
-  );
-  return { uploadUrl: putUrl, publicUrl: getUrl };
+function parseUrlExpiry(env = process.env) {
+  const parsed = Number.parseInt(env.URL_EXPIRY, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_URL_EXPIRY;
 }
 
-// Generate pre-signed PUT URL for audio upload
-app.post('/api/presign-audio', async (req, res) => {
-  try {
-    const { filename, contentType } = req.body;
+function shouldAutoSetupCors(env = process.env) {
+  return !['false', '0', 'no'].includes((env.AUTO_SETUP_CORS || '').toLowerCase());
+}
 
-    // 1.2 — Input validation
-    if (!filename || typeof filename !== 'string') {
-      return res.status(400).json({ error: 'Missing or invalid filename' });
-    }
-    const ext = path.extname(filename).replace('.', '').toLowerCase();
-    if (!ALLOWED_AUDIO_EXT.has(ext)) {
-      return res.status(400).json({ error: 'Unsupported audio format' });
-    }
-    if (contentType && !String(contentType).startsWith('audio/')) {
-      return res.status(400).json({ error: 'Invalid content type' });
-    }
+function shouldTrustProxy(env = process.env) {
+  return ['true', '1', 'yes'].includes((env.TRUST_PROXY || '').toLowerCase());
+}
 
-    const fileId = randomUUID();
-    const key = `audio/${fileId}.${ext}`;
-    const { uploadUrl, publicUrl } = await generatePresignedUrls(key, contentType || 'audio/webm');
-
-    res.json({ uploadUrl, publicUrl, key, fileId });
-  } catch (error) {
-    // 1.3 — Don't leak error internals
-    console.error('Error generating audio presigned URL:', error);
-    res.status(500).json({ error: 'Failed to generate presigned URL' });
+function getPresignAuthToken(env = process.env) {
+  const token = (env.PRESIGN_AUTH_TOKEN || '').trim();
+  if (!token || PRESIGN_AUTH_PLACEHOLDERS.has(token)) {
+    throw new Error('Missing required PRESIGN_AUTH_TOKEN. Set it to a private random value shared only with trusted clients.');
   }
-});
+  return token;
+}
 
-// Generate pre-signed PUT URL for transcript upload
-app.post('/api/presign-transcript', async (req, res) => {
+function normalizeOrigin(origin) {
   try {
-    const { fileId } = req.body;
+    return new URL(origin).origin;
+  } catch {
+    return '';
+  }
+}
 
-    // 1.2 — Validate fileId is a UUID
-    if (!fileId || !UUID_RE.test(fileId)) {
-      return res.status(400).json({ error: 'Invalid file ID' });
+function normalizeAllowedOrigins(origins) {
+  return origins
+    .map((origin) => normalizeOrigin(origin.trim()))
+    .filter(Boolean);
+}
+
+function getAllowedOrigins(env = process.env) {
+  return normalizeAllowedOrigins((env.CORS_ORIGIN || '').split(','));
+}
+
+function createCorsOrigin(allowedOrigins) {
+  return function corsOrigin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
     }
 
-    const key = `transcripts/${fileId}.json`;
-    const { uploadUrl, publicUrl } = await generatePresignedUrls(key, 'application/json');
+    callback(null, allowedOrigins.includes(origin) ? origin : false);
+  };
+}
 
-    res.json({ uploadUrl, publicUrl, key });
-  } catch (error) {
-    console.error('Error generating transcript presigned URL:', error);
-    res.status(500).json({ error: 'Failed to generate presigned URL' });
-  }
-});
+function parseContentLength(size) {
+  return Number.isSafeInteger(size) && size > 0 ? size : null;
+}
 
-// 2.4 — Health check with B2 connectivity verification
-app.get('/health', async (req, res) => {
+function signPayload(encodedPayload, secret) {
+  return createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+}
+
+function signaturesMatch(expectedSignature, actualSignature) {
   try {
-    await s3Client.send(new HeadBucketCommand({ Bucket: BUCKET }));
-    res.json({ status: 'ok' });
-  } catch (error) {
-    console.error('Health check failed:', error);
-    res.status(503).json({ status: 'degraded' });
+    const expected = Buffer.from(expectedSignature, 'base64url');
+    const actual = Buffer.from(actualSignature, 'base64url');
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  } catch {
+    return false;
   }
-});
+}
 
-const PORT = process.env.PORT || 3000;
+function stringsMatch(expectedValue, actualValue) {
+  if (typeof expectedValue !== 'string' || typeof actualValue !== 'string') {
+    return false;
+  }
 
-// Auto-setup CORS on startup
-async function startServer() {
-  if (AUTO_SETUP_CORS) {
+  const expected = Buffer.from(expectedValue);
+  const actual = Buffer.from(actualValue);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+export function createTranscriptToken(fileId, secret, ttlMs, now = Date.now()) {
+  const payload = Buffer.from(JSON.stringify({
+    exp: now + ttlMs,
+    fileId,
+  })).toString('base64url');
+  const signature = signPayload(payload, secret);
+  return `${payload}.${signature}`;
+}
+
+export function verifyTranscriptToken(token, fileId, secret, now = Date.now()) {
+  if (!token || typeof token !== 'string') {
+    return false;
+  }
+
+  const [payload, signature, extra] = token.split('.');
+  if (!payload || !signature || extra !== undefined) {
+    return false;
+  }
+
+  const expectedSignature = signPayload(payload, secret);
+  if (!signaturesMatch(expectedSignature, signature)) {
+    return false;
+  }
+
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return claims.fileId === fileId && Number.isSafeInteger(claims.exp) && claims.exp > now;
+  } catch {
+    return false;
+  }
+}
+
+export function createPresignRateLimit({
+  maxRequests = PRESIGN_RATE_LIMIT_MAX_REQUESTS,
+  now = Date.now,
+  windowMs = PRESIGN_RATE_LIMIT_WINDOW_MS,
+} = {}) {
+  const clients = new Map();
+  let nextCleanupAt = 0;
+
+  return function presignRateLimit(req, res, next) {
+    const key = req.ip || req.socket?.remoteAddress || 'unknown';
+    const currentTime = now();
+
+    if (currentTime >= nextCleanupAt) {
+      for (const [clientKey, entry] of clients) {
+        if (entry.resetAt <= currentTime) {
+          clients.delete(clientKey);
+        }
+      }
+      nextCleanupAt = currentTime + windowMs;
+    }
+
+    const current = clients.get(key);
+    if (!current || current.resetAt <= currentTime) {
+      clients.set(key, { count: 1, resetAt: currentTime + windowMs });
+      next();
+      return;
+    }
+
+    current.count += 1;
+    if (current.count > maxRequests) {
+      res.status(429).json({ error: 'Too many presign requests' });
+      return;
+    }
+
+    next();
+  };
+}
+
+function originMatchesRequestHost(req, origin) {
+  try {
+    const parsedOrigin = new URL(origin);
+    return parsedOrigin.host === req.get('host') && parsedOrigin.protocol === `${req.protocol}:`;
+  } catch {
+    return false;
+  }
+}
+
+function createPresignAuth({ allowedOrigins = [], authToken }) {
+  return function presignAuth(req, res, next) {
+    const origin = req.get('origin');
+    if (origin && !allowedOrigins.includes(origin) && !originMatchesRequestHost(req, origin)) {
+      res.status(403).json({ error: 'Untrusted origin' });
+      return;
+    }
+
+    const auth = req.get('authorization') || '';
+    const match = auth.match(/^Bearer\s+(.+)$/i);
+    const suppliedToken = match ? match[1] : '';
+    if (!stringsMatch(authToken, suppliedToken)) {
+      res.status(401).json({ error: 'Presign authentication required' });
+      return;
+    }
+
+    next();
+  };
+}
+
+export function createPutObjectInput(bucket, key, contentType, options = {}) {
+  const putObject = {
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+  };
+
+  if (options.contentLength !== undefined) {
+    putObject.ContentLength = options.contentLength;
+  }
+
+  return putObject;
+}
+
+function createPresignHelper(s3Client, b2Settings, urlExpiry) {
+  const bucket = b2Settings.bucketName;
+
+  return async function generatePresignedUrls(key, contentType, options = {}) {
+    const putUrl = await getSignedUrl(
+      s3Client,
+      new PutObjectCommand(createPutObjectInput(bucket, key, contentType, options)),
+      { expiresIn: urlExpiry }
+    );
+    const publicUrl = getB2PublicUrl(key, b2Settings) || await getSignedUrl(
+      s3Client,
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+      { expiresIn: urlExpiry }
+    );
+    return { uploadUrl: putUrl, publicUrl };
+  };
+}
+
+export function createApp({
+  allowedOrigins = getAllowedOrigins(),
+  b2Settings = getB2Settings(),
+  maxAudioFileSize = MAX_AUDIO_FILE_SIZE,
+  presignAuthToken = getPresignAuthToken(),
+  presignRateLimit = createPresignRateLimit(),
+  presignUrls,
+  s3Client = createB2S3Client(b2Settings),
+  transcriptTokenTtlMs,
+  trustProxy = shouldTrustProxy(),
+  urlExpiry = parseUrlExpiry(),
+} = {}) {
+  const app = express();
+  app.set('trust proxy', trustProxy);
+
+  const bucket = b2Settings.bucketName;
+  const trustedOrigins = normalizeAllowedOrigins(allowedOrigins);
+  const presignObjectUrls = presignUrls || createPresignHelper(s3Client, b2Settings, urlExpiry);
+  // Transcript tokens default to the presigned URL lifetime; override
+  // transcriptTokenTtlMs if long-lived URLs should not imply long-lived tokens.
+  const tokenTtlMs = transcriptTokenTtlMs || urlExpiry * 1000;
+  const presignMiddlewares = [
+    ...(presignRateLimit ? [presignRateLimit] : []),
+    createPresignAuth({ allowedOrigins: trustedOrigins, authToken: presignAuthToken }),
+  ];
+
+  app.use(cors({ origin: createCorsOrigin(trustedOrigins) }));
+  app.use(express.json({ limit: '1kb' }));
+  app.use(express.static(path.join(__dirname, '../frontend')));
+
+  app.post('/api/presign-audio', ...presignMiddlewares, async (req, res) => {
+    try {
+      const { filename, contentType, size } = req.body;
+
+      if (!filename || typeof filename !== 'string') {
+        return res.status(400).json({ error: 'Missing or invalid filename' });
+      }
+
+      const contentLength = parseContentLength(size);
+      if (!contentLength) {
+        return res.status(400).json({ error: 'Missing or invalid file size' });
+      }
+      if (contentLength > maxAudioFileSize) {
+        return res.status(413).json({ error: `File too large. Maximum size is ${maxAudioFileSize} bytes.` });
+      }
+
+      const ext = path.extname(filename).replace('.', '').toLowerCase();
+      if (!ALLOWED_AUDIO_EXT.has(ext)) {
+        return res.status(400).json({ error: 'Unsupported audio format' });
+      }
+      if (contentType && !String(contentType).startsWith('audio/')) {
+        return res.status(400).json({ error: 'Invalid content type' });
+      }
+
+      const fileId = randomUUID();
+      const key = `audio/${fileId}.${ext}`;
+      const { uploadUrl, publicUrl } = await presignObjectUrls(
+        key,
+        contentType || 'audio/webm',
+        { contentLength }
+      );
+      const transcriptToken = createTranscriptToken(fileId, b2Settings.applicationKey, tokenTtlMs);
+
+      res.json({ uploadUrl, publicUrl, key, fileId, transcriptToken });
+    } catch (error) {
+      console.error('Error generating audio presigned URL:', error);
+      res.status(500).json({ error: 'Failed to generate presigned URL' });
+    }
+  });
+
+  app.post('/api/presign-transcript', ...presignMiddlewares, async (req, res) => {
+    try {
+      const { fileId, transcriptToken } = req.body;
+
+      if (!fileId || !UUID_RE.test(fileId)) {
+        return res.status(400).json({ error: 'Invalid file ID' });
+      }
+      if (!verifyTranscriptToken(transcriptToken, fileId, b2Settings.applicationKey)) {
+        return res.status(403).json({ error: 'Invalid transcript token' });
+      }
+
+      const key = `transcripts/${fileId}.json`;
+      const { uploadUrl, publicUrl } = await presignObjectUrls(key, 'application/json');
+
+      res.json({ uploadUrl, publicUrl, key });
+    } catch (error) {
+      console.error('Error generating transcript presigned URL:', error);
+      res.status(500).json({ error: 'Failed to generate presigned URL' });
+    }
+  });
+
+  app.get('/health', async (req, res) => {
+    try {
+      await s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
+      res.json({ status: 'ok' });
+    } catch (error) {
+      console.error('Health check failed:', error);
+      res.status(503).json({ status: 'degraded' });
+    }
+  });
+
+  return app;
+}
+
+export async function startServer() {
+  let b2Settings;
+  let presignAuthToken;
+  try {
+    b2Settings = getB2Settings();
+    presignAuthToken = getPresignAuthToken();
+  } catch (error) {
+    console.error(error.message);
+    console.error('Copy .env.example to .env and fill in your credentials.');
+    process.exit(1);
+  }
+
+  const s3Client = createB2S3Client(b2Settings);
+
+  if (shouldAutoSetupCors()) {
     console.log('Checking B2 CORS configuration...');
     try {
-      await setupCORS(true);
+      await setupCORS(true, b2Settings);
       console.log('B2 CORS is configured');
     } catch (error) {
       if (error.Code === 'InvalidRequest' && error.message.includes('B2 Native CORS rules')) {
@@ -163,9 +381,10 @@ async function startServer() {
     }
   }
 
-  // 2.3 — Graceful shutdown
-  const server = app.listen(PORT, () => {
-    console.log(`\nServer running on http://localhost:${PORT}\n`);
+  const port = process.env.PORT || 3000;
+  const app = createApp({ b2Settings, presignAuthToken, s3Client });
+  const server = app.listen(port, () => {
+    console.log(`\nServer running on http://localhost:${port}\n`);
   });
 
   function shutdown() {
@@ -178,4 +397,7 @@ async function startServer() {
   process.on('SIGINT', shutdown);
 }
 
-startServer();
+const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : '';
+if (import.meta.url === invokedPath) {
+  startServer();
+}

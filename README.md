@@ -71,14 +71,30 @@ cp .env.example .env
 Edit `.env` with your [B2 credentials](https://www.backblaze.com/docs/cloud-storage-enable-backblaze-b2?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples):
 
 ```env
-B2_ENDPOINT=https://s3.us-west-002.backblazeb2.com
+B2_APPLICATION_KEY_ID=your_application_key_id
+B2_APPLICATION_KEY=your_application_key
+B2_BUCKET_NAME=your-bucket-name
 B2_REGION=us-west-002
-B2_KEY_ID=your_key_id_here
-B2_APP_KEY=your_app_key_here
-B2_BUCKET=your-bucket-name
+B2_PUBLIC_URL_BASE=
+PRESIGN_AUTH_TOKEN=change_me_to_a_random_value
 ```
 
-> Get your B2 endpoint and region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples)
+> Get your B2 region from your [bucket details page](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=audiosamples). The S3-compatible endpoint is derived from `B2_REGION`. Set `B2_PUBLIC_URL_BASE` only when your bucket is public or fronted by a CDN; otherwise the app returns pre-signed GET URLs.
+
+Set `PRESIGN_AUTH_TOKEN` to a private random value and enter the same value in the app before uploading. For hosted frontends, set `CORS_ORIGIN` to the trusted frontend origin. Multiple origins can be comma-separated. If deploying behind a reverse proxy or TLS terminator, set `TRUST_PROXY=true` so same-origin checks and rate limiting use the forwarded protocol and client IP.
+
+#### Migrating from legacy environment names
+
+For rolling deploys and rollback safety, the backend still accepts the legacy names during a compatibility window. During transition, configure both the legacy and standardized names in the runtime environment, deploy this version, then remove the legacy names after all running processes have been updated. Standardized names take precedence when both are present.
+
+| Legacy name | Standard name |
+| --- | --- |
+| `B2_KEY_ID` | `B2_APPLICATION_KEY_ID` |
+| `B2_APP_KEY` | `B2_APPLICATION_KEY` |
+| `B2_BUCKET` | `B2_BUCKET_NAME` |
+| `B2_ENDPOINT` | Use `B2_REGION`; the S3-compatible endpoint is derived automatically |
+
+Legacy aliases are planned for removal in `v2.0.0`, no earlier than September 30, 2026.
 
 ### 3. Start the App
 
@@ -207,11 +223,14 @@ Or use B2 Web UI → App Keys → Create Key
 
 ### POST /api/presign-audio
 
+Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and a trusted `Origin` when sent from a browser. The bearer header is the only supported presign-auth transport.
+
 Request:
 ```json
 {
   "filename": "audio.mp3",
-  "contentType": "audio/mpeg"
+  "contentType": "audio/mpeg",
+  "size": 1234567
 }
 ```
 
@@ -221,18 +240,24 @@ Response:
   "uploadUrl": "https://...",
   "publicUrl": "https://...",
   "key": "audio/uuid.mp3",
-  "fileId": "uuid"
+  "fileId": "uuid",
+  "transcriptToken": "server-issued-token"
 }
 ```
 
 ### POST /api/presign-transcript
 
+Requires `Authorization: Bearer <PRESIGN_AUTH_TOKEN>` and the `transcriptToken` returned by `/api/presign-audio`. By default, the transcript token expires with `URL_EXPIRY`; set `transcriptTokenTtlMs` in server code if you need a different lifetime.
+
 Request:
 ```json
 {
-  "fileId": "uuid"
+  "fileId": "uuid",
+  "transcriptToken": "server-issued-token"
 }
 ```
+
+The presign endpoints reject files over 100 MiB before issuing upload URLs and rate limit presign requests to 60 requests per minute per client IP.
 
 Response:
 ```json
@@ -344,7 +369,7 @@ Requires WebAssembly and ES6 modules support.
 
 **Solution**:
 1. Check bucket is public or URLs are pre-signed
-2. Verify endpoint URL matches bucket region
+2. Verify `B2_REGION` matches the bucket region
 3. Try accessing URL directly in browser
 4. Check B2 bucket lifecycle rules aren't deleting files
 

@@ -260,6 +260,34 @@
             color: oklch(0.44 0.02 260);
         }
 
+        .auth-field {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .auth-field label {
+            color: oklch(0.16 0.02 265);
+            font-size: 0.8125rem;
+            font-weight: 600;
+        }
+
+        .auth-field input {
+            border: 1px solid oklch(0.92 0.005 260);
+            border-radius: 6px;
+            color: oklch(0.16 0.02 265);
+            font: inherit;
+            font-size: 0.875rem;
+            padding: 10px 12px;
+            width: 100%;
+        }
+
+        .auth-field input:focus-visible {
+            border-color: oklch(0.44 0.27 275 / 0.5);
+            box-shadow: 0 0 0 3px oklch(0.44 0.27 275 / 0.18);
+            outline: none;
+        }
+
         .footer {
             margin-top: 24px;
             padding-top: 16px;
@@ -323,6 +351,11 @@
             <p style="margin-top: 8px;">Everything runs client-side. Your audio never touches our server.</p>
         </div>
 
+        <div class="auth-field">
+            <label for="authToken">Upload token</label>
+            <input type="password" id="authToken" autocomplete="off">
+        </div>
+
         <div class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-label="Upload audio file. Drop a file here or press Enter to browse.">
             <div class="upload-icon">🎵</div>
             <h3>Drop audio file here or click to browse</h3>
@@ -351,7 +384,7 @@
                     <a id="transcriptLink" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center;">View Transcript JSON</a>
                 </div>
                 <p class="links-hint">
-                    Click links above to access your files (pre-signed URLs valid for 1 hour)
+                    Click links above to access your files from B2
                 </p>
             </div>
         </div>
@@ -372,6 +405,7 @@
         let selectedFile = null;
         let audioUrl = null;
         let fileId = null;
+        let transcriptToken = null;
         let whisperPipeline = null;
 
         const uploadZone = document.getElementById('uploadZone');
@@ -381,12 +415,29 @@
         const progressContainer = document.getElementById('progressContainer');
         const progressBar = document.getElementById('progressBar');
         const result = document.getElementById('result');
+        const authTokenInput = document.getElementById('authToken');
 
         // API is served from same origin
         const API_BASE = window.location.origin;
+        // Sample convenience: keep the operator-provided presign token only for
+        // this browser session. Production forks should prefer server-side auth.
+        const PRESIGN_AUTH_STORAGE_KEY = 'b2-whisper-presign-token';
 
-        // 2.10 — Max file size (100 MB)
+        authTokenInput.value = sessionStorage.getItem(PRESIGN_AUTH_STORAGE_KEY) || '';
+        authTokenInput.addEventListener('input', () => {
+            sessionStorage.setItem(PRESIGN_AUTH_STORAGE_KEY, authTokenInput.value.trim());
+        });
+
+        // 2.10 — Max file size (100 MiB)
         const MAX_FILE_SIZE = 100 * 1024 * 1024;
+        const AUDIO_CONTENT_TYPES = new Map([
+            ['flac', 'audio/flac'],
+            ['m4a', 'audio/mp4'],
+            ['mp3', 'audio/mpeg'],
+            ['ogg', 'audio/ogg'],
+            ['wav', 'audio/wav'],
+            ['webm', 'audio/webm'],
+        ]);
 
         // 2.12 — Named progress constants
         const PROGRESS = {
@@ -426,6 +477,42 @@
             progressContainer.style.display = 'none';
         }
 
+        function getPresignHeaders() {
+            const token = authTokenInput.value.trim();
+            if (!token) {
+                throw new Error('Enter the upload token');
+            }
+            return {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+        }
+
+        async function getJsonError(response, fallback) {
+            try {
+                const body = await response.json();
+                return body && typeof body.error === 'string' ? body.error : fallback;
+            } catch {
+                return fallback;
+            }
+        }
+
+        function getFileExtension(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            return ext === file.name.toLowerCase() ? '' : ext;
+        }
+
+        function isAudioFile(file) {
+            return (file.type || '').startsWith('audio/') || AUDIO_CONTENT_TYPES.has(getFileExtension(file));
+        }
+
+        function getAudioContentType(file) {
+            if ((file.type || '').startsWith('audio/')) {
+                return file.type;
+            }
+            return AUDIO_CONTENT_TYPES.get(getFileExtension(file)) || 'audio/webm';
+        }
+
         // File upload handling
         uploadZone.addEventListener('click', () => fileInput.click());
 
@@ -457,24 +544,28 @@
 
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
-                handleFileSelect(e.target.files[0]);
+                const file = e.target.files[0];
+                fileInput.value = '';
+                handleFileSelect(file);
             }
         });
 
         async function handleFileSelect(file) {
-            if (!file.type.startsWith('audio/')) {
+            if (!isAudioFile(file)) {
                 showStatus('Please select an audio file', 'error');
                 return;
             }
 
             // 2.10 — File size validation
             if (file.size > MAX_FILE_SIZE) {
-                showStatus('File too large. Maximum size is 100 MB.', 'error');
+                showStatus('File too large. Maximum size is 100 MiB.', 'error');
                 return;
             }
 
             selectedFile = file;
-            showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+            transcriptToken = null;
+            transcribeBtn.disabled = true;
+            showStatus(`Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MiB)`, 'success');
 
             // Upload to B2 immediately
             await uploadToB2();
@@ -485,29 +576,33 @@
                 showStatus('Uploading audio to B2...', 'info');
                 setProgress(PROGRESS.UPLOAD_START);
 
+                const audioContentType = getAudioContentType(selectedFile);
+
                 // Get pre-signed URL for audio
                 const response = await fetchWithTimeout(`${API_BASE}/api/presign-audio`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getPresignHeaders(),
                     body: JSON.stringify({
                         filename: selectedFile.name,
-                        contentType: selectedFile.type
+                        contentType: audioContentType,
+                        size: selectedFile.size
                     })
                 });
 
                 if (!response.ok) {
-                    throw new Error('Failed to get pre-signed URL');
+                    throw new Error(await getJsonError(response, 'Failed to get pre-signed URL'));
                 }
 
-                const { uploadUrl, publicUrl, fileId: id } = await response.json();
+                const { uploadUrl, publicUrl, fileId: id, transcriptToken: token } = await response.json();
                 fileId = id;
+                transcriptToken = token;
 
                 setProgress(PROGRESS.PRESIGN_DONE);
 
                 // Upload audio to B2 (120s timeout for large files)
                 const uploadResponse = await fetchWithTimeout(uploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': selectedFile.type, 'User-Agent': "b2ai-transformersjs" },
+                    headers: { 'Content-Type': audioContentType },
                     body: selectedFile
                 }, 120000);
 
@@ -561,12 +656,12 @@
                 // Get pre-signed URL for transcript
                 const presignResponse = await fetchWithTimeout(`${API_BASE}/api/presign-transcript`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fileId })
+                    headers: getPresignHeaders(),
+                    body: JSON.stringify({ fileId, transcriptToken })
                 });
 
                 if (!presignResponse.ok) {
-                    throw new Error('Failed to get transcript pre-signed URL');
+                    throw new Error(await getJsonError(presignResponse, 'Failed to get transcript pre-signed URL'));
                 }
 
                 const { uploadUrl: transcriptUploadUrl, publicUrl: transcriptPublicUrl } = await presignResponse.json();
@@ -582,7 +677,7 @@
                 // 2.11 — Compact JSON (no pretty-print for upload)
                 const transcriptUploadResponse = await fetchWithTimeout(transcriptUploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'User-Agent': "b2ai-transformersjs" },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(transcriptData)
                 }, 120000);
 
